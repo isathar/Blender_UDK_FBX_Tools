@@ -1463,7 +1463,7 @@ def save_single(operator, scene, filepath="",
 		
 		# rotation matrix for normals
 		normaltranslate = axis_conversion(from_forward='-Z',from_up='Y',to_forward='Y',to_up='Z') if axis_setting == 'SKELMESH' else 1.0
-		
+		usedefaultnormals = (normals_export_mode == 'AUTO')
 		#################
 		# Normals:
 		
@@ -1471,7 +1471,9 @@ def save_single(operator, scene, filepath="",
 		# custom - Included Addon: Works 100%
 		if normals_export_mode == 'C_ISATHAR':
 			if 'custom_meshdata' in meshobject and "UCX_" not in meshobject.name:
-				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
+				uvlayer = []
+				if use_tangents:
+					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
 				
 				vcount = 0
 				
@@ -1525,11 +1527,8 @@ def save_single(operator, scene, filepath="",
 							tempheading = calc_uvtanbase(uvface, faceverts)
 							uvverts_list += [tempheading]
 			else:
-				print("Couldn't find vertex_normals")
-				use_tangents = False
-				for mf in me_faces:
-					for j in range(len(mf.vertices)):
-						me_normals += [me_vertices[mf.vertices[j]].normal]
+				print("Couldn't find vertex_normals, reverting to default")
+				usedefaultnormals = True
 						
 		################################################################
 		# custom - Recalc Vertex Normals script: Works, but no tangents for now
@@ -1541,30 +1540,68 @@ def save_single(operator, scene, filepath="",
 					for j in mf.vertices:
 						me_normals += [meshobject.vertex_normal_list[j].normal]
 			else:
-				print("Couldn't find vertex_normals")
-				use_tangents = False
-				for mf in me_faces:
-					for j in range(len(mf.vertices)):
-						me_normals += [me_vertices[mf.vertices[j]].normal]
+				print("Couldn't find vertex_normals, reverting to default")
+				usedefaultnormals = True
 
 		#######################################################################
-		# default -- fallback:  Works, but no tangents for now
-		else:
-			#uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-			use_tangents = False
-			for mf in me_faces:
-				for j in range(len(mf.vertices)):
-					me_normals += [me_vertices[mf.vertices[j]].normal]
+		# default / fallback: works 100%
+		if usedefaultnormals:
+			uvlayer = []
+			if use_tangents:
+				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
+			
+			vcount = 0
+			
+			for i in range(len(me_faces)):
+				mf = me_faces[i]
 				
+				tempverts = [fv for fv in mf.vertices]
+				
+				faceverts = []
+				uvface = []
+				vcount = 0
+				
+				for j in range(len(tempverts)):
+					faceverts += [Vector(me_vertices[tempverts[j]].co)]
+					
+					tempnorm = me_vertices[tempverts[j]].normal
+					tempvec = Vector((0.0,0.0,0.0))
+					tempvec[0] = tempnorm[0]
+					tempvec[1] = tempnorm[1]
+					tempvec[2] = tempnorm[2]
+					normvec = tempvec * normaltranslate
+					
+					me_normals += [normvec]
+					
+					if use_tangents:
+						me_normals_unproc += [tempvec]
+						if vcount == 0:
+							uvface += [uvlayer[i].uv1]
+							uv_vertcoords += [Vector(uvlayer[i].uv1)]
+						elif vcount == 1:
+							uvface += [uvlayer[i].uv2]
+							uv_vertcoords += [Vector(uvlayer[i].uv2)]
+						elif vcount == 2:
+							uvface += [uvlayer[i].uv3]
+							uv_vertcoords += [Vector(uvlayer[i].uv3)]
+						elif vcount == 3:
+							uvface += [uvlayer[i].uv4]
+							uv_vertcoords += [Vector(uvlayer[i].uv4)]
+					
+					vindices += [tempverts[j]]
+					vcount += 1
+				
+				if use_tangents:
+					for k in range(vcount):
+						tempheading = calc_uvtanbase(uvface, faceverts)
+						uvverts_list += [tempheading]
 		
 		
 		##############################################################
-		# Tangents + Binormals:
-		
-		binormal_headings = []
-		
+		# Tangents + Binormals calculation:
+
 		if use_tangents:
-			#print("uvverts_list length: " + str(len(uvverts_list)) + ", need " + str(len(me_normals)))
+			print("uvverts_list length: " + str(len(uvverts_list)) + ", need " + str(len(me_normals)))
 			print("Calculating Tangents and Binormals...")
 			
 			for i in range(len(me_normals)):
@@ -1617,7 +1654,7 @@ def save_single(operator, scene, filepath="",
 							tempUV1 = uv_vertcoords[j]
 							tempUV2 = uv_vertcoords[lastuvindex]
 							tempdist = math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2))
-							print("tempdist = " + str(tempdist))
+							#print("tempdist = " + str(tempdist))
 							if tempdist < 0.01:
 								lastuvindex = j
 								procflist += [me_tangents[j]]
