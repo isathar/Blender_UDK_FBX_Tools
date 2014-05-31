@@ -1424,8 +1424,11 @@ def save_single(operator, scene, filepath="",
 	
 	
 	def write_mesh(my_mesh):
-
+		
+		#Gather mesh data
+		
 		me = my_mesh.blenData
+		meshobject = my_mesh.blenObject
 
 		# if there are non NULL materials on this mesh
 		do_materials = bool(my_mesh.blenMaterials)
@@ -1455,24 +1458,28 @@ def save_single(operator, scene, filepath="",
 		uv_vertcoords = []
 		vindices = []
 		
+		use_tangents = (export_tangents and ("UCX_" not in meshobject.name))
+		use_smoothinggroups = (mesh_smooth_type == 'GROUPS' and ("UCX_" not in meshobject.name))
+		
 		# rotation matrix for normals
 		normaltranslate = axis_conversion(from_forward='-Z',from_up='Y',to_forward='Y',to_up='Z') if axis_setting == 'SKELMESH' else 1.0
 		
-		# custom normals - Included Addon: Works 100%
+		#################
+		# Normals:
+		
+		#################################################
+		# custom - Included Addon: Works 100%
 		if normals_export_mode == 'C_ISATHAR':
-			if 'custom_meshdata' in bpy.context.active_object:
+			if 'custom_meshdata' in meshobject and "UCX_" not in meshobject.name:
 				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
 				
-				temp_edges = [fe for fe in me.edges]
-				
 				vcount = 0
-				findex = 0
 				
 				for i in range(len(me_faces)):
 					mf = me_faces[i]
 
 					tempverts = [fv for fv in mf.vertices]
-					tempvn = bpy.context.active_object.custom_meshdata[i]
+					tempvn = meshobject.custom_meshdata[i]
 					
 					faceverts = []
 					uvface = []
@@ -1496,7 +1503,7 @@ def save_single(operator, scene, filepath="",
 								normvec = tempvec * normaltranslate
 								
 								me_normals += [normvec]
-								if export_tangents:
+								if use_tangents:
 									me_normals_unproc += [tempvec]
 									if vcount == 0:
 										uvface += [uvlayer[i].uv1]
@@ -1513,43 +1520,50 @@ def save_single(operator, scene, filepath="",
 								
 								vindices += [j]
 								vcount += 1
-					findex += 1
-					if export_tangents:
-						for i in range(vcount):
+					if use_tangents:
+						for k in range(vcount):
 							tempheading = calc_uvtanbase(uvface, faceverts)
 							uvverts_list += [tempheading]
 			else:
-				#fall back to blender's normals if vertex_normals var doesn't exist
 				print("Couldn't find vertex_normals")
+				use_tangents = False
 				for mf in me_faces:
-					for vn in mf.vertices:
-						me_normals += [me_vertices[vn].normal]
-
-		# custom normals - Recalc Vertex Normals script: Works 100%
+					for j in range(len(mf.vertices)):
+						me_normals += [me_vertices[mf.vertices[j]].normal]
+						
+		################################################################
+		# custom - Recalc Vertex Normals script: Works, but no tangents for now
 		elif normals_export_mode == 'C_ASDN':
-			if 'vertex_normal_list' in bpy.context.active_object:
-				count = 0
-				for v in me_vertices:
-					vnl = bpy.context.active_object.vertex_normal_list[count]
-					normvec = Vector(vnl.normal) * normaltranslate
-					me_normals += [normvec]
-					count += 1
+			if 'vertex_normal_list' in meshobject:
+				use_tangents = False
+				for i in range(len(me_faces)):
+					mf = me_faces[i]
+					for j in mf.vertices:
+						me_normals += [meshobject.vertex_normal_list[j].normal]
 			else:
-				for v in me_vertices:
-					me_normals += [v.normal]
+				print("Couldn't find vertex_normals")
+				use_tangents = False
+				for mf in me_faces:
+					for j in range(len(mf.vertices)):
+						me_normals += [me_vertices[mf.vertices[j]].normal]
 
-		# default normals -- fallback
+		#######################################################################
+		# default -- fallback:  Works, but no tangents for now
 		else:
-			for v in me_vertices:
-				me_normals += [v.normal]
+			#uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
+			use_tangents = False
+			for mf in me_faces:
+				for j in range(len(mf.vertices)):
+					me_normals += [me_vertices[mf.vertices[j]].normal]
+				
 		
 		
-		#################################
+		##############################################################
 		# Tangents + Binormals:
-		#	- wip, something is still off here
+		
 		binormal_headings = []
 		
-		if export_tangents:
+		if use_tangents:
 			#print("uvverts_list length: " + str(len(uvverts_list)) + ", need " + str(len(me_normals)))
 			print("Calculating Tangents and Binormals...")
 			
@@ -1685,11 +1699,11 @@ def save_single(operator, scene, filepath="",
 						
 		####################################
 		# smoothing groups
-		if mesh_smooth_type == 'GROUPS':
+		if use_smoothinggroups:
 			
 			print("Converting Smoothing groups...")
-			for i in range(len(bpy.context.object.custom_meshdata)):
-				sg = bpy.context.object.custom_meshdata[i]
+			for i in range(len(meshobject.custom_meshdata)):
+				sg = meshobject.custom_meshdata[i]
 				tempsg = 0
 				for i in range(sg.fsgroup):
 					if (tempsg <= 1):
@@ -1718,7 +1732,8 @@ def save_single(operator, scene, filepath="",
 		   '\n\t\tShading: Y'
 		   '\n\t\tCulling: "CullingOff"'
 		   )
-
+		
+		############################################
 		# Write the Real Mesh data here
 		fw('\n\t\tVertices: ')
 		i = -1
@@ -1787,19 +1802,40 @@ def save_single(operator, scene, filepath="",
 
 		fw('\n\t\tGeometryVersion: 124')
 
+		########################################
 		#		Normals, Tangents, Binormals:
-		#  Write as PerVertice for Default and asdn's, else write as ByPolygonVertex
-		if normals_export_mode == 'C_ASDN' or normals_export_mode == 'AUTO':
-			fw('''
+
+		fw('''
 		LayerElementNormal: 0 {
 			Version: 101
 			Name: ""
-			MappingInformationType: "ByVertice"
+			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "Direct"
 			Normals: ''')
 
+		i = -1
+		for v in me_normals:
+			if i == -1:
+				fw('%.6f,%.6f,%.6f' % v[:])
+				i = 0
+			else:
+				if i == 2:
+					fw('\n\t\t\t ')
+					i = 0
+				fw(',%.6f,%.6f,%.6f'% v[:])
+			i += 1
+		fw('\n\t\t}')
+		if use_tangents:
+			fw('''
+		LayerElementBinormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Binormals: ''')
+
 			i = -1
-			for v in me_normals:
+			for v in me_binormals:
 				if i == -1:
 					fw('%.6f,%.6f,%.6f' % v[:])
 					i = 0
@@ -1810,61 +1846,17 @@ def save_single(operator, scene, filepath="",
 					fw(',%.6f,%.6f,%.6f'% v[:])
 				i += 1
 			fw('\n\t\t}')
-			
-			if export_tangents:
-				fw('''
-		LayerElementBinormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByVertice"
-			ReferenceInformationType: "Direct"
-			Binormals: ''')
 
-				i = -1
-				for v in me_binormals:
-					if i == -1:
-						fw('%.6f,%.6f,%.6f' % v[:])
-						i = 0
-					else:
-						if i == 2:
-							fw('\n\t\t\t ')
-							i = 0
-						fw(',%.6f,%.6f,%.6f'% v[:])
-					i += 1
-				fw('\n\t\t}')
-
-				fw('''
-		LayerElementTangent: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByVertice"
-			ReferenceInformationType: "Direct"
-			Tangents: ''')
-
-				i = -1
-				for v in me_tangents:
-					if i == -1:
-						fw('%.6f,%.6f,%.6f' % v[:])
-						i = 0
-					else:
-						if i == 2:
-							fw('\n\t\t\t ')
-							i = 0
-						fw(',%.6f,%.6f,%.6f'% v[:])
-					i += 1
-				fw('\n\t\t}')
-
-		else:
 			fw('''
-		LayerElementNormal: 0 {
+		LayerElementTangent: 0 {
 			Version: 101
 			Name: ""
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "Direct"
-			Normals: ''')
+			Tangents: ''')
 
 			i = -1
-			for v in me_normals:
+			for v in me_tangents:
 				if i == -1:
 					fw('%.6f,%.6f,%.6f' % v[:])
 					i = 0
@@ -1875,99 +1867,11 @@ def save_single(operator, scene, filepath="",
 					fw(',%.6f,%.6f,%.6f'% v[:])
 				i += 1
 			fw('\n\t\t}')
-			if export_tangents:
-				fw('''
-		LayerElementBinormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Binormals: ''')
 
-				i = -1
-				for v in me_binormals:
-					if i == -1:
-						fw('%.6f,%.6f,%.6f' % v[:])
-						i = 0
-					else:
-						if i == 2:
-							fw('\n\t\t\t ')
-							i = 0
-						fw(',%.6f,%.6f,%.6f'% v[:])
-					i += 1
-				fw('\n\t\t}')
-
-				fw('''
-		LayerElementTangent: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Tangents: ''')
-
-				i = -1
-				for v in me_tangents:
-					if i == -1:
-						fw('%.6f,%.6f,%.6f' % v[:])
-						i = 0
-					else:
-						if i == 2:
-							fw('\n\t\t\t ')
-							i = 0
-						fw(',%.6f,%.6f,%.6f'% v[:])
-					i += 1
-				fw('\n\t\t}')
-
-		# Write Face Smoothing
-		if mesh_smooth_type == 'FACE':
-			fw('''
-		LayerElementSmoothing: 0 {
-			Version: 102
-			Name: ""
-			MappingInformationType: "ByPolygon"
-			ReferenceInformationType: "Direct"
-			Smoothing: ''')
-
-			i = -1
-			for f in me_faces:
-				if i == -1:
-					fw('%i' % f.use_smooth)
-					i = 0
-				else:
-					if i == 54:
-						fw('\n\t\t\t ')
-						i = 0
-					fw(',%i' % f.use_smooth)
-				i += 1
-
-			fw('\n\t\t}')
-
-		elif mesh_smooth_type == 'EDGE':
-			# Write Edge Smoothing
-			fw('''
-		LayerElementSmoothing: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByEdge"
-			ReferenceInformationType: "Direct"
-			Smoothing: ''')
-
-			i = -1
-			for ed in me_edges:
-				if i == -1:
-					fw('%i' % (ed.use_edge_sharp))
-					i = 0
-				else:
-					if i == 54:
-						fw('\n\t\t\t ')
-						i = 0
-					fw(',%i' % ed.use_edge_sharp)
-				i += 1
-
-			fw('\n\t\t}')
+		###########################################
+		# Write Smoothing Groups
+		if use_smoothinggroups:
 			
-		elif mesh_smooth_type == 'GROUPS':
-			# Write Smoothing Groups
 			fw('''
 		LayerElementSmoothing: 0 {
 			Version: 102
@@ -1993,12 +1897,62 @@ def save_single(operator, scene, filepath="",
 				i += 1
 
 			fw('\n\t\t}')
+		# Write Face Smoothing
+		elif mesh_smooth_type == 'FACE' or ("UCX_" in meshobject.name):
+			fw('''
+		LayerElementSmoothing: 0 {
+			Version: 102
+			Name: ""
+			MappingInformationType: "ByPolygon"
+			ReferenceInformationType: "Direct"
+			Smoothing: ''')
 
+			i = -1
+			for f in me_faces:
+				if i == -1:
+					fw('%i' % f.use_smooth)
+					i = 0
+				else:
+					if i == 54:
+						fw('\n\t\t\t ')
+						i = 0
+					fw(',%i' % f.use_smooth)
+				i += 1
+
+			fw('\n\t\t}')
+		# Write Edge Smoothing
+		elif mesh_smooth_type == 'EDGE':
+			
+			fw('''
+		LayerElementSmoothing: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByEdge"
+			ReferenceInformationType: "Direct"
+			Smoothing: ''')
+
+			i = -1
+			for ed in me_edges:
+				if i == -1:
+					fw('%i' % (ed.use_edge_sharp))
+					i = 0
+				else:
+					if i == 54:
+						fw('\n\t\t\t ')
+						i = 0
+					fw(',%i' % ed.use_edge_sharp)
+				i += 1
+
+			fw('\n\t\t}')
+		
+		# Write No Smoothing
 		elif mesh_smooth_type == 'OFF':
 			pass
 		else:
 			raise Exception("invalid mesh_smooth_type: %r" % mesh_smooth_type)
 
+		#####################################################
+		
 		# Write VertexColor Layers
 		# note, no programs seem to use this info :/
 		collayers = []

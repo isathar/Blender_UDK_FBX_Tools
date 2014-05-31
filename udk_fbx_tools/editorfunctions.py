@@ -88,9 +88,12 @@ def get_vert_fromloc(verts_list, vloc):
 def get_facesforvert(listobject, vertloc):
 	indices = []
 	for i in range(len(listobject)):
+		foundone = False
 		for j in range(len(listobject[i].vdata)):
-			if in_distance(vertloc, listobject[i].vdata[j].vpos, 0.3126):
-				indices += [i]
+			if not foundone:
+				if in_distance(vertloc, listobject[i].vdata[j].vpos, 0.3126):
+					indices += [i]
+					foundone = True
 	return indices
 
 # returns index of poly in list
@@ -152,10 +155,13 @@ def get_polynormal_forvert(vertloc, listobject):
 	
 	for i in range(len(listobject)):
 		lo = listobject[i]
+		foundone = False
 		for j in range(len(lo.vdata)):
-			vd = lo.vdata[j]
-			if in_distance(vertloc,vd.vpos,0.3126):
-				normlist += [vd.vnormal]
+			if not foundone:
+				vd = lo.vdata[j]
+				if in_distance(vertloc,vd.vpos,0.3126):
+					normlist += [vd.vnormal]
+					foundone = True
 	return normlist
 
 

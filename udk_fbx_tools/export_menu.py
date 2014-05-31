@@ -96,9 +96,9 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			)
 	normals_export_mode = EnumProperty(
 			name="Normals",
-			items=(('AUTO', "Blender Default", "Let Blender generate normals"),
+			items=(('AUTO', "Default", "Let Blender generate normals"),
 				   ('C_ASDN', "asdn's Addon", "write normals from Recalc Vertex Normals script"),
-				   ('C_ISATHAR', "Included Addon", "write normals from the included Vertex Normals Addon"),
+				   ('C_ISATHAR', "From Editor", "write normals from the included Vertex Normals Addon"),
 				   ),
 			default='AUTO',
 			)
