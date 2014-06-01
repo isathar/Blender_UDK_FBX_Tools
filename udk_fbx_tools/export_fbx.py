@@ -20,7 +20,7 @@
 # NOTES:
 #
 # based on the fbx export script included in < v2.68 
-# original script created by Campbell Barton
+# original script created by and copyright (c) Campbell Barton
 #
 # Changes:
 # - tangent + binormal calculation based on Lengyel's Method with support for quads
@@ -1468,14 +1468,12 @@ def save_single(operator, scene, filepath="",
 		# Normals:
 		
 		#################################################
-		# custom - Included Addon: Works 100%
+		# custom - Included Addon
 		if normals_export_mode == 'C_ISATHAR':
 			if 'custom_meshdata' in meshobject and "UCX_" not in meshobject.name:
 				uvlayer = []
 				if use_tangents:
 					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-				
-				vcount = 0
 				
 				for i in range(len(me_faces)):
 					mf = me_faces[i]
@@ -1531,26 +1529,67 @@ def save_single(operator, scene, filepath="",
 				usedefaultnormals = True
 						
 		################################################################
-		# custom - Recalc Vertex Normals script: Works, but no tangents for now
+		# custom - Recalc Vertex Normals script
 		elif normals_export_mode == 'C_ASDN':
-			if 'vertex_normal_list' in meshobject:
-				use_tangents = False
+			if 'vertex_normal_list' in meshobject and "UCX_" not in meshobject.name:
+				uvlayer = []
+				if use_tangents:
+					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
+					
 				for i in range(len(me_faces)):
 					mf = me_faces[i]
+					tempverts = [fv for fv in mf.vertices]
+					
+					faceverts = []
+					uvface = []
+					vcount = 0
+					
 					for j in mf.vertices:
-						me_normals += [meshobject.vertex_normal_list[j].normal]
+						faceverts += [Vector(me_vertices[j].co)]
+					
+						tempnorm = meshobject.vertex_normal_list[j].normal
+						tempvec = Vector((0.0,0.0,0.0))
+						tempvec[0] = tempnorm[0]
+						tempvec[1] = tempnorm[1]
+						tempvec[2] = tempnorm[2]
+						normvec = tempvec * normaltranslate
+						
+						me_normals += [normvec]
+						
+						if use_tangents:
+							me_normals_unproc += [tempvec]
+							if vcount == 0:
+								uvface += [uvlayer[i].uv1]
+								uv_vertcoords += [Vector(uvlayer[i].uv1)]
+							elif vcount == 1:
+								uvface += [uvlayer[i].uv2]
+								uv_vertcoords += [Vector(uvlayer[i].uv2)]
+							elif vcount == 2:
+								uvface += [uvlayer[i].uv3]
+								uv_vertcoords += [Vector(uvlayer[i].uv3)]
+							elif vcount == 3:
+								uvface += [uvlayer[i].uv4]
+								uv_vertcoords += [Vector(uvlayer[i].uv4)]
+						
+						vindices += [j]
+						vcount += 1
+					
+					if use_tangents:
+						for k in range(vcount):
+							tempheading = calc_uvtanbase(uvface, faceverts)
+							uvverts_list += [tempheading]
+						
+						
 			else:
 				print("Couldn't find vertex_normals, reverting to default")
 				usedefaultnormals = True
 
 		#######################################################################
-		# default / fallback: works 100%
+		# default / fallback
 		if usedefaultnormals:
 			uvlayer = []
 			if use_tangents:
 				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-			
-			vcount = 0
 			
 			for i in range(len(me_faces)):
 				mf = me_faces[i]
