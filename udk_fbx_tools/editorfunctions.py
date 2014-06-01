@@ -198,6 +198,7 @@ def generate_newnormals(self, context):
 
 			write_frompoly(tempfacedata.vdata, faceverts)
 
+	#############################
 	# Blender default normals
 	if (genmode == 'DEFAULT'):
 		if bpy.context.window_manager.vn_genselectiononly:
@@ -289,8 +290,10 @@ def generate_newnormals(self, context):
 
 				write_frompoly(tempfacedata.vdata, faceverts)
 
+	###############################
 	# Up-Vector normals
 	elif (genmode == 'UPVECT'):
+		
 		if bpy.context.window_manager.vn_genselectiononly:
 			for i in range(len(bpy.context.object.custom_meshdata)):
 				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
@@ -301,6 +304,7 @@ def generate_newnormals(self, context):
 				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
 					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
 
+	#########################
 	# Bent normals
 	elif (genmode == 'POINT'):
 		
@@ -309,21 +313,34 @@ def generate_newnormals(self, context):
 			for i in range(len(bpy.context.object.custom_meshdata)):
 				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
 					if faces_list[i].verts[j].select:
-						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
 						tempv = Vector(bpy.context.object.custom_meshdata[i].vdata[j].vpos) - cursorloc
 						tempv = tempv.normalized()
 						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = tempv
 		else:
 			for vn in bpy.context.object.custom_meshdata:
 				for vd in vn.vdata:
-					vd.vnormal = (0.0,0.0,1.0)
 					tempv = Vector(vd.vpos) - cursorloc
 					tempv = tempv.normalized()
 					vd.vnormal = tempv
-
+	
+	###################################################
+	# combination bent and up-vector for ground foliage
+	elif (genmode == 'G_FOLIAGE'):
+		
+		cursorloc = context.scene.cursor_location
+		for i in range(len(bpy.context.object.custom_meshdata)):
+			for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
+				if faces_list[i].verts[j].select:
+					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
+				else:
+					tempv = Vector(bpy.context.object.custom_meshdata[i].vdata[j].vpos) - cursorloc
+					tempv = tempv.normalized()
+					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = tempv
+	
 	##########################
 	# Angle-based custom algorithm
 	elif (genmode == 'ANGLES'):
+		
 		if bpy.context.window_manager.vn_genselectiononly:
 			bpy.context.window_manager.temp_meshdata.clear()
 			selectedlist = []
@@ -331,6 +348,8 @@ def generate_newnormals(self, context):
 			wipnormalslist = []
 			
 			verts_list = [v for v in bm.verts]
+			
+			# Pass 1 - Faces
 			for vn in bpy.context.object.custom_meshdata:
 				tempface = bpy.context.window_manager.temp_meshdata.add()
 				
@@ -355,6 +374,7 @@ def generate_newnormals(self, context):
 				
 				update_face_inlist(tempface, vn)
 			
+			#Pass 2 - Vertices
 			for vn in bpy.context.object.custom_meshdata:
 				fnormal = vn.fnormal
 				for i in range(len(vn.vdata)):
@@ -368,7 +388,6 @@ def generate_newnormals(self, context):
 							for l in range(len(v.link_faces[k].verts)):
 								if v.link_faces[k].verts[l] == v:
 									tempnorms += [bpy.context.window_manager.temp_meshdata[v.link_faces[k].index].vdata[l].vnormal]
-						#tempnorms = get_polynormal_forvert(vd.vpos, bpy.context.window_manager.temp_meshdata)
 
 						avg = []
 
@@ -385,7 +404,7 @@ def generate_newnormals(self, context):
 			
 			connectedfaces = []
 			
-			#print("Starting procedure...")
+			# Pass 1 - Faces
 			for j in range(len(bpy.context.object.custom_meshdata)):
 				vn = bpy.context.object.custom_meshdata[j]
 				tempface = bpy.context.window_manager.temp_meshdata.add()
@@ -406,7 +425,7 @@ def generate_newnormals(self, context):
 				
 				update_face_inlist(tempface, vn)
 			
-			#print("Finished first main loop...")
+			# Pass 2 - Vertices
 			for j in range(len(bpy.context.object.custom_meshdata)):
 				vn = bpy.context.object.custom_meshdata[j]
 				fnormal = vn.fnormal
@@ -420,7 +439,6 @@ def generate_newnormals(self, context):
 						for l in range(len(v.link_faces[i].verts)):
 							if v.link_faces[i].verts[l] == v:
 								tempnorms += [bpy.context.window_manager.temp_meshdata[v.link_faces[i].index].vdata[l].vnormal]
-					#tempnorms = get_polynormal_forvert(vd.vpos, bpy.context.window_manager.temp_meshdata)
 
 					avg = []
 
@@ -430,11 +448,7 @@ def generate_newnormals(self, context):
 					
 					vd.vnormal = get_average(avg).normalized()
 
-					
-			#print("Finished second main loop...")
-
-
-		
+	
 	me.update()
 
 ##
@@ -638,7 +652,7 @@ def paste_tempnormalslist(self, context):
 	for tempv in verts_list:
 		face_indices = get_facesforvert(bpy.context.object.custom_meshdata, tempv.co)
 		temp_normals = get_polynormal_forvert(tempv.co, bpy.context.window_manager.temp_meshdata)
-		print("FaceIndices: " + str(len(face_indices)) + ", tempnormals: " + str(len(temp_normals)))
+		#print("FaceIndices: " + str(len(face_indices)) + ", tempnormals: " + str(len(temp_normals)))
 		for i in range(len(temp_normals)):
 			if temp_normals[i] != Vector((0.0,0.0,0.0)):
 				set_vertnormal_byloc(temp_normals[i], tempv.co, bpy.context.object.custom_meshdata[face_indices[i]])

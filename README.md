@@ -34,6 +34,7 @@ Editor for Vertex Normals:
 			--- Angle-Based (slow but customizable algorithm)
 			--- Up-Vector
 			--- Bent (facing away from 3d cursor)
+			--- Ground Foliage (selected ground based vertices point up, everything else bent from cursor)
 			--- (TBD: Edge-Based and Smoothing Group-Based)
 	- Allows calculating normals for selected faces or the whole mesh
 	- Normals can be displayed as lines for visual editing
