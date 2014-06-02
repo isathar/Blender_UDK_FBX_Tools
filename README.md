@@ -34,7 +34,7 @@ Editor for Vertex Normals:
 			--- Angle-Based (slow but customizable algorithm)
 			--- Up-Vector
 			--- Bent (facing away from 3d cursor)
-			--- Ground Foliage (selected ground based vertices point up, everything else bent from cursor)
+			--- Ground Foliage (selected ground based vertices point up, everything else bent from an offset point)
 			--- (TBD: Edge-Based and Smoothing Group-Based)
 	- Allows calculating normals for selected faces or the whole mesh
 	- Normals can be displayed as lines for visual editing
@@ -42,8 +42,8 @@ Editor for Vertex Normals:
 	- Real-time in Edit Mode
 
 
-Editor for Smoothing Groups:
-----------------------------
+Editor for Smoothing Groups: *experimental*
+--------------------------------------------
 
 	- Manual editing of smoothing groups per face
 	- Groups can be displayed as numbers on corresponding faces
@@ -51,7 +51,7 @@ Editor for Smoothing Groups:
 
 
 Customized FBX Exporter:
-------------------------
+-------------------------
 
 	- Can export everything from the above addons
 	- Can calculate and export tangents and binormals
@@ -59,6 +59,137 @@ Customized FBX Exporter:
 	- UDK-specific optimiztions:
 		-- b_root is now exported as root bone instead of the exporter creating a new one
 		-- limited axis flip settings to things that make sense and labeled them
-		-- tangents are very close to what UDK automatically generates
+		-- tangents are very close to UDK's
+		
 
+==================================================================================
+
+Documentation: (kind of)
+===========================
+
+Main Panel:
+-----------
+
+Export - opens the xport menu for the included fbx exporter
+
+Initialize - creates new custom mesh data object for selected mesh
+
+Reset - reset's custom mesh data to defaul
+Clear - deletes custom mesh data
+
+Enable/Disable (show/hide editors)
+
+Match Grid - sets grid scale and subdivisions to 16 to match the grid to UDK's
+or resets them to default
+
+
+
+Exporter:
+
+Axis flip - Static mesh for default axis, Skeletal Mesh for Y+, Z+
+Smoothing - 'Groups' will export smoothing groups from the editor, 
+	'Off', 'Face', 'Edges' behave like default versions
+Normals - Default 	- Blender generates normals
+	- From Editor 	- Custom nromals from the included Vertex Normals Editor
+	- asdsn's Addon - export normals from the Recalc Vertex Normals addon
+
+Tangents + Binormals - calculates and exports tangents + 'binormals' for the mesh. 
+
+The animation options weren't altered.
+
+
+===================================================================================================
+
+
+Vertex Normals Editor:
+-----------------------
+
+To enable:
+- Go to the UDK FBX Tool panel, click Initialize
+- Click Enable under 'Vertex Normals'
+
+
+Manual editing:
+
+Poly:
+
+- select a vertex or set of vertices on the same face,
+- set the face index in the textbox below the normal coordinate,
+- set the x,y,z, normal coordinate to whatever you want,
+- click set
+
+Vertex:
+
+- make sure 'Edit All' is checked,
+- same steps as per-poly, but face index is not used
+
+checking 'Real-Time' will change the normal as you change the coordinates in the box
+
+
+Automatic Generation:
+
+-select a mode from the dropdown menu.
+- overview of modes:
+	- 'Smooth (Default)'
+		-- generates Blender's default normals + copies to custom data 
+	- 'Up-Vector'
+		-- normals point up, early experiment into grass lighting
+	- 'Bent'
+		-- normals point away from 3d cursor location
+		-- good for tree foliage when used with 'Selected Only'
+	- 'Ground Foliage'
+		-- good for grass planes - normals on selected vertices point up, everything else away from 'Center Offset'
+			- lowering the Center Offset's Z-value will lower the amount by which upper normals are bent, making the shading look less 'round'
+		-- if 'Ignore Hidden' is set, you can hide parts of the mesh and generate only for visible faces
+		-- This mode produces the best results with a two-sided mesh, but a 2-sided material will also benefit.
+	- 'Custom (angle-based)'
+		-- a customizable algorithm I'm working on to generate normals based on dot product tresholds for face angles
+	- 'Edges' and 'Smoothing Groups' settings do nothing yet and will (hopefully) work in a later version.
+
+checking 'Selected Only' will generate normals for selected faces (this is still buggy with the 'Smooth' and 'Custom' algorithms).
+
+
+Transfer Normals:
+
+NOTE: This is a work in progress feature and may mess with the vertex order. Pasting overlapping vertices' normals with this will generate errors.
+
+Copy - copies selected vertex normals to buffer
+Paste - pastes buffered normals to vertices found at the same position
+
+The points of this feature are to reduce seams on modular character meshes and to allow copying of sharp edges from identical meshes with edge splits.
+
+
+Display:
+
+Options for drawing lines to represent the vertex normals (color, scale, selection only)
+
+
+===============================================================================================
+
+Smoothing Groups Editor:
+------------------------
+
+*Note this tool is experimental, since the exporter currently does not create normals/tangents to match the groups. UDK will automatically generate normals based on the groups if you import the mesh with 'Import Tangents' and 'Explicit Normals' (for static meshes) unchecked, but xNormal won't. I'm looking into ways to generate normals from smoothing groups.
+
+To enable:
+- Go to the UDK FBX Tool panel, click Initialize
+- Click Enable under 'Smoothing Groups',
+
+to set faces to a specific group:
+- select the face
+- change the number in the editor's textbox
+- click 'Set'
+
+to select all faces in a group:
+- deselect everything
+- set the group number you want to find
+- click 'Select Group'
+
+Group 0 is for flat shading (which you probably won't be using)
+Groups 1-32 are smooth
+
+to show currently set groups, click 'Show' under Display. Group numbers should be drawn on corresponding faces.
+
+
+=========================================================================================================
 

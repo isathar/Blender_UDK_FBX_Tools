@@ -326,16 +326,23 @@ def generate_newnormals(self, context):
 	###################################################
 	# combination bent and up-vector for ground foliage
 	elif (genmode == 'G_FOLIAGE'):
-		
-		cursorloc = context.scene.cursor_location
+		ignorehidden = bpy.context.window_manager.vn_genignorehidden
+		#cursorloc = context.scene.cursor_location
+		cursorloc = Vector(bpy.context.window_manager.vn_gfoliage_centeroffset)
 		for i in range(len(bpy.context.object.custom_meshdata)):
+			ignoreface = False
+			if ignorehidden:
+				if faces_list[i].hide:
+					ignoreface = True
 			for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
 				if faces_list[i].verts[j].select:
-					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
-				else:
-					tempv = Vector(bpy.context.object.custom_meshdata[i].vdata[j].vpos) - cursorloc
-					tempv = tempv.normalized()
-					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = tempv
+					if not ignoreface:
+						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
+				else:	
+					if not ignoreface:
+						tempv = Vector(bpy.context.object.custom_meshdata[i].vdata[j].vpos) - cursorloc
+						tempv = tempv.normalized()
+						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = tempv
 	
 	##########################
 	# Angle-based custom algorithm

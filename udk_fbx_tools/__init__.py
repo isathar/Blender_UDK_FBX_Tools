@@ -19,14 +19,13 @@
 bl_info = {
 	"name": "FBX Normals & Smoothing Tools",
 	"author": "Andreas Wiehn (isathar)",
-	"version": (0, 5, 0),
+	"version": (0, 7, 0),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
 	"description": "Adds editors for smoothing groups and vertex normals,"
 					"as well as an exporter with some UDK-specific optimizations "
 					"that supports both. Also supports tangent and binormal "
-					"calculation and export, (almost completely) synced with "
-					"UDK's (and xNormal's default) tangent space.",
+					"calculation and export.",
 	"warning": "",
 	"wiki_url": "",
 	"tracker_url": "",
@@ -442,7 +441,11 @@ class vertex_normals_panel(bpy.types.Panel):
 					if bpy.context.window_manager.vn_generatemode != 'G_FOLIAGE':
 						row = box.row()
 						row.prop(bpy.context.window_manager, 'vn_genselectiononly', text='Selected Only')
-					
+					else:
+						row = box.row()
+						row.column().prop(bpy.context.window_manager, 'vn_gfoliage_centeroffset', text='Center Offset')
+						row = box.row()
+						row.prop(bpy.context.window_manager, 'vn_genignorehidden', text='Ignore Hidden')
 					if bpy.context.window_manager.vn_generatemode == 'SELECTION' or bpy.context.window_manager.vn_generatemode == 'ANGLES':
 						row = box.row()
 						label = row.label("Angle Thresholds:", 'NONE')
@@ -689,6 +692,12 @@ def initdefaults():
 		max=0.99,
 		step=1,
 		)
+	bpy.types.WindowManager.vn_gfoliage_centeroffset = bpy.props.FloatVectorProperty(
+		default=(0.0,0.0,-1.0),
+		subtype='TRANSLATION',
+		)
+	bpy.types.WindowManager.vn_genignorehidden = bpy.props.BoolProperty(
+		default=False)
 
 	# 	Manual Edit vars:
 	
@@ -731,7 +740,7 @@ def initdefaults():
 
 
 def clearvars():
-	props = ['vertexnormals_enabled','smoothinggroups_enabled','temp_meshdata','group_colors','tweak_gridsettings_on','vn_changeasone','showing_smoothgroups','sg_selectedgroup','sg_showselected','showing_vnormals','vn_curnormal_disp','vn_displaycolor','vn_generatemode','vndisp_selectiononly','vn_realtimeedit','vn_resetongenerate','vn_disp_scale','vn_selected_face','vn_genselectiononly']
+	props = ['vertexnormals_enabled','smoothinggroups_enabled','temp_meshdata','group_colors','vn_genignorehidden','tweak_gridsettings_on','vn_changeasone','showing_smoothgroups','vn_gfoliage_centeroffset','sg_selectedgroup','sg_showselected','showing_vnormals','vn_curnormal_disp','vn_displaycolor','vn_generatemode','vndisp_selectiononly','vn_realtimeedit','vn_resetongenerate','vn_disp_scale','vn_selected_face','vn_genselectiononly']
 	for p in props:
 		if bpy.context.window_manager.get(p) != None:
 			del bpy.context.window_manager[p]

@@ -1787,6 +1787,7 @@ def save_single(operator, scene, filepath="",
 					else:
 						tempsg = tempsg * 2
 				me_smoothgroups += [tempsg]
+				#me_smoothgroups += [sg.fsgroup]
 				#print(str(sg.sgroup) + " --> " + str(tempsg))
 
 
