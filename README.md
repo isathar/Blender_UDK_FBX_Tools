@@ -193,3 +193,9 @@ to show currently set groups, click 'Show' under Display. Group numbers should b
 
 =========================================================================================================
 
+0.7.5
+- fixed Custom (Angle-Based) auto-generation mode. It's slightly slower (as in, it can take about 5 min for a 3600 poly mesh), but should no longer produce weird results on complex meshes.
+- added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior)
+- fixed wrong vertex being selected while using manual edit (bad math)
+
+0.7.0	initial release

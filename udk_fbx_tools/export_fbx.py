@@ -1428,6 +1428,11 @@ def save_single(operator, scene, filepath="",
 		#Gather mesh data
 		
 		me = my_mesh.blenData
+		
+		# init test var
+		#bm = bmesh.new()
+		#bm.from_mesh(me)
+		
 		meshobject = my_mesh.blenObject
 
 		# if there are non NULL materials on this mesh
@@ -1458,7 +1463,7 @@ def save_single(operator, scene, filepath="",
 		uv_vertcoords = []
 		vindices = []
 		
-		use_tangents = (export_tangents and ("UCX_" not in meshobject.name))
+		use_tangents = (export_tangents and ("UCX_" not in meshobject.name) and (len(me.tessface_uv_textures[0].data) > 0))
 		use_smoothinggroups = (mesh_smooth_type == 'GROUPS' and ("UCX_" not in meshobject.name))
 		
 		# rotation matrix for normals
@@ -1639,9 +1644,13 @@ def save_single(operator, scene, filepath="",
 		##############################################################
 		# Tangents + Binormals calculation:
 
+		if len(uvverts_list) != len(me_normals):
+			use_tangents = False
+			print("UV length mismatch: Tangents calculation disabled.")
+		
 		if use_tangents:
-			print("uvverts_list length: " + str(len(uvverts_list)) + ", need " + str(len(me_normals)))
-			print("Calculating Tangents and Binormals...")
+			#print("uvverts_list length: " + str(len(uvverts_list)) + ", need " + str(len(me_normals)))
+			#print("Calculating Tangents and Binormals...")
 			
 			for i in range(len(me_normals)):
 				tan = uvverts_list[i]

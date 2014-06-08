@@ -23,6 +23,7 @@ import bpy
 import bmesh
 import bgl
 import blf
+import math
 from mathutils import Vector
 
 ##################
@@ -30,7 +31,7 @@ from mathutils import Vector
 
 # returns true if point is within distance^2
 def in_distance(p1, p2, checkdist):
-	tempdist = ((p1[0] - p2[0]) ** 2) + (((p1[1] - p2[1]) ** 2) + (p1[2] - p2[2]) ** 2)
+	tempdist = math.sqrt((p1[0] - p2[0]) ** 2) + (((p1[1] - p2[1]) ** 2) + (p1[2] - p2[2]) ** 2)
 	return (tempdist < checkdist)
 
 # angle check
@@ -66,18 +67,19 @@ def is_sameface(vertlist_locs, vertlist):
 	count = 0
 	for vl in vertlist_locs:
 		for v in vertlist:
-			if in_distance(v, vl, 0.3126):
+			if in_distance(v, vl, 0.0001):
 				count += 1
 	return (count == len(vertlist_locs))
 
 def set_vertnormal_byloc(vertnorm, vloc, listobject):
-		for v in listobject.vdata:
-			if in_distance(vloc, v.vpos, 0.3126):
-				v.vnormal = vertnorm;
+	for v in listobject.vdata:
+		if in_distance(vloc, v.vpos, 0.0001):
+			v.vnormal = vertnorm
+			break
 
 def get_vert_fromloc(verts_list, vloc):
 	for i in range(len(verts_list)):
-		if in_distance(verts_list[i].co, vloc, 0.3126):
+		if in_distance(verts_list[i].co, vloc, 0.0001):
 			return verts_list[i]
 	return []
 	
@@ -91,7 +93,7 @@ def get_facesforvert(listobject, vertloc):
 		foundone = False
 		for j in range(len(listobject[i].vdata)):
 			if not foundone:
-				if in_distance(vertloc, listobject[i].vdata[j].vpos, 0.3126):
+				if in_distance(vertloc, listobject[i].vdata[j].vpos, 0.0001):
 					indices += [i]
 					foundone = True
 	return indices
@@ -99,7 +101,7 @@ def get_facesforvert(listobject, vertloc):
 # returns index of poly in list
 def find_bycenter(listobject, fcenter):
 	for i in range(len(listobject)):
-		if in_distance(listobject[i].fcenter, fcenter, 0.3126):
+		if in_distance(listobject[i].fcenter, fcenter, 0.0001):
 			return i
 	return -1
 
@@ -136,7 +138,6 @@ def replace_byindex(olddata, newdata, index):
 # writes normals data to list from specified vertex list
 def write_frompoly(listobject, vlist):
 	listobject.clear()
-	
 	for i in range(len(vlist)):
 		n = listobject.add()
 		n.vnormal = prepare_vector(vlist[i].normal)
@@ -149,7 +150,7 @@ def write_normals_fromlist(oldlist, newlist):
 		n.vnormal = newlist.vnormal
 		n.vpos = newlist.vpos
 
-# get vert normals as list
+# get vnormals as list
 def get_polynormal_forvert(vertloc, listobject):
 	normlist = []
 	
@@ -159,11 +160,10 @@ def get_polynormal_forvert(vertloc, listobject):
 		for j in range(len(lo.vdata)):
 			if not foundone:
 				vd = lo.vdata[j]
-				if in_distance(vertloc,vd.vpos,0.3126):
+				if in_distance(vertloc,vd.vpos,0.0001):
 					normlist += [vd.vnormal]
 					foundone = True
 	return normlist
-
 
 
 ##
@@ -263,7 +263,6 @@ def generate_newnormals(self, context):
 			
 			bpy.context.window_manager.temp_meshdata.clear()
 		else:
-		
 			for i in range(len(faces_list)):
 				f = faces_list[i]
 				faceverts = f.verts[:]
@@ -347,67 +346,59 @@ def generate_newnormals(self, context):
 	##########################
 	# Angle-based custom algorithm
 	elif (genmode == 'ANGLES'):
+		wipnormalslist = [f.normal for f in faces_list]
+		verts_list = [v for v in bm.verts]
 		
 		if bpy.context.window_manager.vn_genselectiononly:
 			bpy.context.window_manager.temp_meshdata.clear()
 			selectedlist = []
 			
-			wipnormalslist = []
-			
-			verts_list = [v for v in bm.verts]
-			
 			# Pass 1 - Faces
-			for vn in bpy.context.object.custom_meshdata:
+			for j in range(len(bpy.context.object.custom_meshdata)):
+				vn = bpy.context.object.custom_meshdata[j]
 				tempface = bpy.context.window_manager.temp_meshdata.add()
 				
 				fnormal = vn.fnormal
-				fnormals = []
 				
-				for i in range(len(vn.vdata)):
-					selectedlist += [0]
-					vd = vn.vdata[i]
-					v = get_vert_fromloc(verts_list, vd.vpos)
-					lfs = v.link_faces[:]
-					fnormals = []
-					for j in range(len(lfs)):
-						if lfs[j].select:
-							selectedlist[i] = 1
-							tempvec = Vector(lfs[j].normal)
-							if in_angle(Vector(vn.fnormal), tempvec, bpy.context.window_manager.vn_anglebased_dot_face):
-								fnormals = fnormals + [tempvec]
-					if len(fnormals) > 0:
-						tempv = get_average(fnormals).normalized()
-						vd.vnormal = tempv
+				for k in range(len(vn.vdata)):
+					if faces_list[j].select:
+						selectedlist += [1]
+						vd = vn.vdata[k]
+						v = get_vert_fromloc(verts_list, vd.vpos)
+						vd.vnormal = wipnormalslist[j]
+					else:
+						selectedlist += [0]
 				
 				update_face_inlist(tempface, vn)
 			
-			#Pass 2 - Vertices
-			for vn in bpy.context.object.custom_meshdata:
+			# Pass 2 - Vertices
+			vertcount = 0
+			for j in range(len(bpy.context.object.custom_meshdata)):
+				vn = bpy.context.object.custom_meshdata[j]
 				fnormal = vn.fnormal
-				for i in range(len(vn.vdata)):
-					if selectedlist[i] > 0:
-						vd = vn.vdata[i]
-						
+				
+				for k in range(len(vn.vdata)):
+					if selectedlist[vertcount] > 0:
+						vd = vn.vdata[k]
 						tempnorms = []
 						v = get_vert_fromloc(verts_list, vd.vpos)
 
-						for k in range(len(v.link_faces)):
-							for l in range(len(v.link_faces[k].verts)):
-								if v.link_faces[k].verts[l] == v:
-									tempnorms += [bpy.context.window_manager.temp_meshdata[v.link_faces[k].index].vdata[l].vnormal]
-
+						tempnorms = get_polynormal_forvert(vd.vpos, bpy.context.window_manager.temp_meshdata)
 						avg = []
 
-						for j in range(len(tempnorms)):
-							if in_angle(Vector(tempnorms[j]), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
-								avg += [tempnorms[j]]
-						
-						vd.vnormal = get_average(avg).normalized()
+						for i in range(len(tempnorms)):
+							if in_angle(Vector(tempnorms[i]), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
+								avg += [tempnorms[i]]
+						if len(avg) > 0:
+							vd.vnormal = get_average(avg).normalized()
+						else:
+							vd.vnormal = fnormal
+					
+					vertcount += 1
+			bpy.context.window_manager.temp_meshdata.clear()
 			
 		else:
 			bpy.context.window_manager.temp_meshdata.clear()
-			
-			verts_list = [v for v in bm.verts]
 			
 			connectedfaces = []
 			
@@ -417,18 +408,9 @@ def generate_newnormals(self, context):
 				tempface = bpy.context.window_manager.temp_meshdata.add()
 				
 				fnormal = vn.fnormal
-				fnormals = []
 				for k in range(len(vn.vdata)):
 					vd = vn.vdata[k]
-					v = get_vert_fromloc(verts_list, vd.vpos)
-
-					for i in range(len(v.link_faces)):
-						tempvec = Vector(v.link_faces[i].normal)
-						if in_angle(Vector(vn.fnormal), tempvec, bpy.context.window_manager.vn_anglebased_dot_face):
-							fnormals = fnormals + [tempvec]
-					
-					tempv = get_average(fnormals).normalized()
-					vd.vnormal = tempv
+					vd.vnormal = wipnormalslist[j]
 				
 				update_face_inlist(tempface, vn)
 			
@@ -442,18 +424,16 @@ def generate_newnormals(self, context):
 					tempnorms = []
 					v = get_vert_fromloc(verts_list, vd.vpos)
 
-					for i in range(len(v.link_faces)):
-						for l in range(len(v.link_faces[i].verts)):
-							if v.link_faces[i].verts[l] == v:
-								tempnorms += [bpy.context.window_manager.temp_meshdata[v.link_faces[i].index].vdata[l].vnormal]
-
+					tempnorms = get_polynormal_forvert(vd.vpos, bpy.context.window_manager.temp_meshdata)
 					avg = []
 
 					for i in range(len(tempnorms)):
 						if in_angle(Vector(tempnorms[i]), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
 							avg += [tempnorms[i]]
-					
-					vd.vnormal = get_average(avg).normalized()
+					if len(avg) > 0:
+						vd.vnormal = get_average(avg).normalized()
+					else:
+						vd.vnormal = fnormal
 
 	
 	me.update()

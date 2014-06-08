@@ -19,13 +19,13 @@
 bl_info = {
 	"name": "FBX Normals & Smoothing Tools",
 	"author": "Andreas Wiehn (isathar)",
-	"version": (0, 7, 0),
+	"version": (0, 7, 5),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
 	"description": "Adds editors for smoothing groups and vertex normals,"
 					"as well as an exporter with some UDK-specific optimizations "
 					"that supports both. Also supports tangent and binormal "
-					"calculation and export.",
+					"calculation/export for custom normals.",
 	"warning": "",
 	"wiki_url": "",
 	"tracker_url": "",
@@ -799,8 +799,6 @@ def register():
 	
 	bpy.utils.register_class(vertex_normals_panel)
 	
-	
-	
 	initdefaults()
 
 
@@ -821,7 +819,6 @@ def unregister():
 	bpy.utils.unregister_class(debug_shownums)
 	
 	bpy.utils.unregister_class(tweak_gridsettings)
-	
 	
 	#Smoothing Groups:
 	bpy.utils.unregister_class(set_sgroup)
