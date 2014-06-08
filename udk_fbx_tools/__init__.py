@@ -448,9 +448,7 @@ class vertex_normals_panel(bpy.types.Panel):
 						row.prop(bpy.context.window_manager, 'vn_genignorehidden', text='Ignore Hidden')
 					if bpy.context.window_manager.vn_generatemode == 'SELECTION' or bpy.context.window_manager.vn_generatemode == 'ANGLES':
 						row = box.row()
-						label = row.label("Angle Thresholds:", 'NONE')
-						row = box.row()
-						row.prop(bpy.context.window_manager, 'vn_anglebased_dot_face', text='Face')
+						label = row.label("Smoothing Threshold:", 'NONE')
 						row = box.row()
 						row.prop(bpy.context.window_manager, 'vn_anglebased_dot_vert', text='Vertex')
 					

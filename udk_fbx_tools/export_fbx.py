@@ -1463,7 +1463,7 @@ def save_single(operator, scene, filepath="",
 		uv_vertcoords = []
 		vindices = []
 		
-		use_tangents = (export_tangents and ("UCX_" not in meshobject.name) and (len(me.tessface_uv_textures[0].data) > 0))
+		use_tangents = (export_tangents and ("UCX_" not in meshobject.name) and (len(me.tessface_uv_textures) > 0))
 		use_smoothinggroups = (mesh_smooth_type == 'GROUPS' and ("UCX_" not in meshobject.name))
 		
 		# rotation matrix for normals
