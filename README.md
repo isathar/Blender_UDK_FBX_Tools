@@ -144,6 +144,7 @@ Automatic Generation:
 		-- This mode produces the best results with a two-sided mesh, but a 2-sided material will also benefit.
 	- 'Custom (angle-based)'
 		-- a customizable algorithm I'm working on to generate normals based on dot product tresholds for face angles
+		-- 'Smoothing Threshold' is the maximum dot product-based difference between the angles of normals on the same face. (0.99 is flat shading, -0.99 is smooth)
 	- 'Edges' and 'Smoothing Groups' settings do nothing yet and will (hopefully) work in a later version.
 
 checking 'Selected Only' will generate normals for selected faces (this is still buggy with the 'Smooth' and 'Custom' algorithms).
