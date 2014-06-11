@@ -7,7 +7,15 @@ The exporter can also calculate tangents and binormals on export, allowing you t
 
 --------------------------------------------------------------------------
 
-This readme is a work in progress, full documentation will be up soon.
+works with Blender v 2.70 and up.
+
+Installation:
+-------------
+
+- Copy the 'udk_fbx_tools' folder to your addons directory.
+- Find it in the Addon Manager in the 'Mesh' category as 'FBX Normals and Smoothing Tools' and enable it.
+- There should now be a new tab titled 'FBX Tools' in your tools panel.
+
 
 --------------------------------------------------------------------------
 
