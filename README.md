@@ -145,6 +145,7 @@ Automatic Generation:
 	- 'Bent'
 		-- normals point away from 3d cursor location
 		-- good for tree foliage when used with 'Selected Only'
+		-- Checking 'Use Backfaces' will calculate normals facing the opposite direction for faces that are not selected (for 2-sided planes)
 	- 'Ground Foliage'
 		-- good for grass planes - normals on selected vertices point up, everything else away from 'Center Offset'
 			- lowering the Center Offset's Z-value will lower the amount by which upper normals are bent, making the shading look less 'round'

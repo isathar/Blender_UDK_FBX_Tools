@@ -290,28 +290,28 @@ def generate_newnormals(self, context):
 				write_frompoly(tempfacedata.vdata, faceverts)
 
 	###############################
-	# Up-Vector normals
+	# Up-Vector normals / custom directional normals
 	elif (genmode == 'UPVECT'):
 		
 		if bpy.context.window_manager.vn_genselectiononly:
 			for i in range(len(bpy.context.object.custom_meshdata)):
 				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
 					if faces_list[i].verts[j].select:
-						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
+						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = bpy.context.window_manager.vn_directionalgendir
 		else:
 			for i in range(len(bpy.context.object.custom_meshdata)):
 				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
-					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
+					bpy.context.object.custom_meshdata[i].vdata[j].vnormal = bpy.context.window_manager.vn_directionalgendir
 
 	#########################
 	# Bent normals
 	elif (genmode == 'POINT'):
 		
 		cursorloc = context.scene.cursor_location
-		if bpy.context.window_manager.vn_genselectiononly:
+		if bpy.context.window_manager.vn_genselectiononly or bpy.context.window_manager.vn_genfoliagecalcinverse:
 			for i in range(len(bpy.context.object.custom_meshdata)):
 				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
-					if faces_list[i].verts[j].select:
+					if not (faces_list[i].hide) and faces_list[i].select:
 						tempv = Vector(bpy.context.object.custom_meshdata[i].vdata[j].vpos) - cursorloc
 						tempv = tempv.normalized()
 						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = tempv
@@ -321,6 +321,14 @@ def generate_newnormals(self, context):
 					tempv = Vector(vd.vpos) - cursorloc
 					tempv = tempv.normalized()
 					vd.vnormal = tempv
+		
+		if bpy.context.window_manager.vn_genfoliagecalcinverse:
+			for i in range(len(bpy.context.object.custom_meshdata)):
+				for j in range(len(bpy.context.object.custom_meshdata[i].vdata)):
+					if not (faces_list[i].hide) and not (faces_list[i].select):
+						tempv = cursorloc - Vector(bpy.context.object.custom_meshdata[i].vdata[j].vpos)
+						tempv = tempv.normalized()
+						bpy.context.object.custom_meshdata[i].vdata[j].vnormal = tempv
 	
 	###################################################
 	# combination bent and up-vector for ground foliage
@@ -639,7 +647,7 @@ def paste_tempnormalslist(self, context):
 	for tempv in verts_list:
 		face_indices = get_facesforvert(bpy.context.object.custom_meshdata, tempv.co)
 		temp_normals = get_polynormal_forvert(tempv.co, bpy.context.window_manager.temp_meshdata)
-		#print("FaceIndices: " + str(len(face_indices)) + ", tempnormals: " + str(len(temp_normals)))
+		
 		for i in range(len(temp_normals)):
 			if temp_normals[i] != Vector((0.0,0.0,0.0)):
 				set_vertnormal_byloc(temp_normals[i], tempv.co, bpy.context.object.custom_meshdata[face_indices[i]])
