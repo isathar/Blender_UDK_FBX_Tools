@@ -1,20 +1,3 @@
-# ##### BEGIN GPL LICENSE BLOCK #####
-#
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program; if not, write to the Free Software Foundation,
-#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# ##### END GPL LICENSE BLOCK #####
 
 bl_info = {
 	"name": "UE FBX Normals Tools",
@@ -42,8 +25,8 @@ from . import editorfunctions
 # Main Menu
 
 # UI Panel
-class udk_fbxtools_panel(bpy.types.Panel):
-	bl_idname = "object.udk_fbxtools_panel"
+class fbxtools_panel(bpy.types.Panel):
+	bl_idname = "object.fbxtools_panel"
 	bl_label = 'UDK FBX Tools'
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'TOOLS'
@@ -74,15 +57,6 @@ class udk_fbxtools_panel(bpy.types.Panel):
 				row.operator('object.reset_polydata', text='Reset')
 				row.operator('object.clear_polydata', text='Clear')
 				
-				row = box.row()
-				label = row.label("   Smoothing Groups:", 'NONE')
-				
-				row = box.row()
-				if bpy.context.window_manager.smoothinggroups_enabled:
-					row.operator('object.enable_smoothinggroups', text='Disable')
-				else:
-					row.operator('object.enable_smoothinggroups', text='Enable')
-						
 				row = box.row()
 				label = row.label("   Custom Normals:", 'NONE')
 				row = box.row()
@@ -167,24 +141,6 @@ class clear_polydata(bpy.types.Operator):
 		
 
 
-class enable_smoothinggroups(bpy.types.Operator):
-	bl_idname = 'object.enable_smoothinggroups'
-	bl_label = 'Enable Smoothing Groups'
-	bl_description = 'Toggle Smoothing Groups Editor'
-
-	@classmethod
-	def poll(cls, context):
-		return bpy.context.object.custom_meshdata != None
-
-	def execute(self, context):
-		if bpy.context.window_manager.smoothinggroups_enabled:
-			bpy.context.window_manager.smoothinggroups_enabled = False
-		else:
-			bpy.context.window_manager.smoothinggroups_enabled = True
-			
-		return {'FINISHED'}
-
-
 class enable_vertexnormals(bpy.types.Operator):
 	bl_idname = 'object.enable_vertexnormals'
 	bl_label = 'Enable Custom Normals'
@@ -240,131 +196,6 @@ class debug_shownums(bpy.types.Operator):
 		editorfunctions.debug_getmeshdata(self, me)
 
 		return {'FINISHED'}
-
-
-
-######################################
-# Smoothing Groups Editor:
-
-# UI Panel
-class smoothing_groups_panel(bpy.types.Panel):
-	bl_idname = "object.smoothing_groups_panel"
-	bl_label = ' Smoothing Groups'
-	bl_space_type = 'VIEW_3D'
-	bl_region_type = 'TOOLS'
-	bl_category = "FBX Tools"
-	
-	@classmethod
-	def poll(self, context):
-		return context.active_object != None and bpy.context.active_object.type == 'MESH'
-
-	def draw(self, context):
-		layout = self.layout
-
-		row = layout.row(align=True)
-		if 'custom_meshdata' not in bpy.context.object:
-			label = row.label("No smoothing data", 'NONE')
-		else:
-			if bpy.context.window_manager.smoothinggroups_enabled:
-				if context.mode != "EDIT_MESH":
-					label = row.label("Edit Mode required", 'NONE')
-				else:
-					row = layout.row(align=True)
-					label = row.label(" Group Tools:", 'NONE')
-
-					box = layout.box()
-					row = box.row(align=True)
-					row.prop(bpy.context.window_manager, 'sg_selectedgroup', text='')
-					row.operator('object.set_sgroup', text='Set')
-
-					row = box.row(align=True)
-					row.operator('object.select_sgroup', text='Select Group')
-
-
-					row = layout.row(align=True)
-					label = row.label(" Display:", 'NONE')
-
-					box = layout.box()
-					row = box.row(align=True)
-					if bpy.context.window_manager.showing_smoothgroups < 1:
-						row.operator('view3d.show_smoothgroups', text='Show Groups')
-					else:
-						row.operator('view3d.show_smoothgroups', text='Hide Groups')
-
-					row = box.row(align=True)
-					row.prop(bpy.context.window_manager, 'sg_showselected', text = 'Selection Only', toggle=True)
-			else:
-				row = layout.row()
-				label = row.label("Disabled", 'NONE')
-
-# Set group num for selected faces
-class set_sgroup(bpy.types.Operator):
-	bl_idname = 'object.set_sgroup'
-	bl_label = 'Set Group'
-
-	@classmethod
-	def poll(cls, context):
-		return context.active_object != None and bpy.context.active_object.type == 'MESH'
-
-	def execute(self, context):
-		editorfunctions.set_sgroup(context, bpy.context.window_manager.sg_selectedgroup)
-		return {'FINISHED'}
-		
-# select faces in group
-class select_sgroup(bpy.types.Operator):
-	bl_idname = 'object.select_sgroup'
-	bl_label = 'Select Group'
-
-	@classmethod
-	def poll(cls, context):
-		return context.active_object != None and bpy.context.active_object.type == 'MESH'
-
-	def execute(self, context):
-		editorfunctions.select_facesingroup(context, bpy.context.window_manager.sg_selectedgroup)
-		return {'FINISHED'}
-
-
-# Toggle smoothing group display
-class show_smoothgroups(bpy.types.Operator):
-	bl_idname = "view3d.show_smoothgroups"
-	bl_label = 'Show Groups'
-
-	_handle = None
-
-	@classmethod
-	def poll(cls, context):
-		return context.mode=="EDIT_MESH"
-
-	def modal(self, context, event):
-		if context.area:
-			context.area.tag_redraw()
-		# removal of callbacks when operator is called again
-		if bpy.context.window_manager.showing_smoothgroups == -1:
-			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-			bpy.context.window_manager.showing_smoothgroups = 0
-			return {"CANCELLED"}
-		return {"PASS_THROUGH"}
-
-	def invoke(self, context, event):
-		if context.area.type == "VIEW_3D":
-			if bpy.context.window_manager.showing_smoothgroups < 1:
-				
-				# operator is called for the first time, start everything
-				bpy.context.window_manager.showing_smoothgroups = 1
-				self._handle = bpy.types.SpaceView3D.draw_handler_add(editorfunctions.draw_smoothing_groups,
-					(self, context), 'WINDOW', 'POST_PIXEL')
-				context.window_manager.modal_handler_add(self)
-				return {"RUNNING_MODAL"}
-			else:
-				# operator is called again, stop displaying
-				bpy.context.window_manager.showing_smoothgroups = -1
-				return {'RUNNING_MODAL'}
-		else:
-			self.report({"WARNING"}, "View3D not found, can't run operator")
-			return {"CANCELLED"}
-
-#end Smoothing Groups
-#######################################
 
 
 
@@ -628,7 +459,6 @@ class vert_data(bpy.types.PropertyGroup):
 class face_data(bpy.types.PropertyGroup):
 	fcenter = bpy.props.FloatVectorProperty(default=(0.0, 0.0, 0.0))
 	fnormal = bpy.props.FloatVectorProperty(default=(0.0, 0.0, 0.0))
-	fsgroup = bpy.props.IntProperty(default=0)
 	vcount = bpy.props.IntProperty(default=0)
 	vdata = bpy.props.CollectionProperty(type=vert_data)
 
@@ -790,23 +620,15 @@ def register():
 	
 	######################
 	#Main Panel:
-	bpy.utils.register_class(udk_fbxtools_panel)
+	bpy.utils.register_class(fbxtools_panel)
 	
 	bpy.utils.register_class(reset_polydata)
 	bpy.utils.register_class(clear_polydata)
-	bpy.utils.register_class(enable_smoothinggroups)
 	bpy.utils.register_class(enable_vertexnormals)
 	bpy.utils.register_class(debug_shownums)
 	
 	bpy.utils.register_class(tweak_gridsettings)
 	
-	#######################
-	#Smoothing Groups Panel:
-	bpy.utils.register_class(set_sgroup)
-	bpy.utils.register_class(select_sgroup)
-	bpy.utils.register_class(show_smoothgroups)
-	
-	bpy.utils.register_class(smoothing_groups_panel)
 	
 	##########################
 	#Vertex Normals Panel
@@ -831,7 +653,7 @@ def unregister():
 	#Export:
 	bpy.utils.unregister_class(export_menu.ExportFBX)
 	
-	bpy.utils.unregister_class(udk_fbxtools_panel)
+	bpy.utils.unregister_class(fbxtools_panel)
 	
 	bpy.utils.unregister_class(reset_polydata)
 	bpy.utils.unregister_class(clear_polydata)
@@ -840,12 +662,6 @@ def unregister():
 	bpy.utils.unregister_class(debug_shownums)
 	
 	bpy.utils.unregister_class(tweak_gridsettings)
-	
-	#Smoothing Groups:
-	bpy.utils.unregister_class(set_sgroup)
-	bpy.utils.unregister_class(select_sgroup)
-	bpy.utils.unregister_class(show_smoothgroups)
-	bpy.utils.unregister_class(smoothing_groups_panel)
 	
 	#Vertex Normals:
 	bpy.utils.unregister_class(reset_vnormals)
