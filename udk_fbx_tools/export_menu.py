@@ -77,18 +77,31 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			description="Apply modifiers to mesh objects",
 			default=False,
 			)
-	axis_setting = EnumProperty(
-			name="Axis Flip",
-			items=(('SKELMESH', "Skeletal Mesh", "Z Up, Y Forward"),
-				   ('STATICMESH', "Static Mesh", "Default (Y Up, -Z Forward)"),
+	axis_forward = EnumProperty(
+			name="Forward Axis",
+			items=(('-Z', "* -Z", "- UE Default"),
+				   ('-Y', "  -Y", ""),
+				   ('-X', "  -X", ""),
+				   ('Z', "   Z", ""),
+				   ('Y', "   Y", ""),
+				   ('X', "   X", ""),
 				   ),
-			default='STATICMESH',
+			default='-Z',
 			)
-
+	axis_up = EnumProperty(
+			name="Up Axis",
+			items=(('-Z', "  -Z", ""),
+				   ('-Y', "  -Y", ""),
+				   ('-X', "  -X", ""),
+				   ('Z', "   Z", ""),
+				   ('Y', " * Y", "- UE Default"),
+				   ('X', "   X", ""),
+				   ),
+			default='Y',
+			)
 	mesh_smooth_type = EnumProperty(
 			name="Smoothing",
 			items=(('OFF', "Off", "Don't write smoothing"),
-				   ('GROUPS', "Groups", "Write smoothing groups"),
 				   ('FACE', "Face", "Write face smoothing"),
 				   ('EDGE', "Edge", "Write edge smoothing"),
 				   ),
@@ -106,6 +119,17 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			name="Tangents + Binormals",
 			description="Calculate and save tangents and binormals",
 			default=True,
+			)
+	export_rootbonename = StringProperty(
+			name="Root Bone",
+			description="The name of your skeleton's root bone",
+			default='b_root',
+			)
+	export_skeletonname = StringProperty(
+			name="Skeleton Name",
+			description="The name of your skeleton/armature",
+			default='Armature',
+			options={'HIDDEN'},
 			)
 	use_armature_deform_only = BoolProperty(
 			name="Only Deform Bones",
@@ -166,7 +190,6 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			default=True,
 			options={'HIDDEN'},
 			)
-
 	
 	@property
 	def check_extension(self):
@@ -181,12 +204,12 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 		if not self.filepath:
 			raise Exception("filepath not set")
 
-		axis_up = 'Y'
-		axis_forward = '-Z'
+		#axis_up = 'Y'
+		#axis_forward = '-Z'
 
-		if self.axis_setting == 'SKELMESH':
-			axis_up = 'Z'
-			axis_forward = 'Y'
+		#if self.axis_setting == 'SKELMESH':
+		#	axis_up = 'Z'
+		#	axis_forward = 'Y'
 
 		global_matrix = Matrix()
 
@@ -194,15 +217,9 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 		global_matrix[1][1] = \
 		global_matrix[2][2] = self.global_scale
 
-		global_matrix = (global_matrix *
-						 axis_conversion(to_forward=axis_forward,
-										 to_up=axis_up,
-										 ).to_4x4())
+		global_matrix = (global_matrix * axis_conversion(to_forward=self.axis_forward,to_up=self.axis_up,).to_4x4())
 
-		keywords = self.as_keywords(ignore=("global_scale",
-											"check_existing",
-											"filter_glob",
-											))
+		keywords = self.as_keywords(ignore=("global_scale","check_existing","filter_glob","axis_forward","axis_up"))
 
 		keywords["global_matrix"] = global_matrix
 

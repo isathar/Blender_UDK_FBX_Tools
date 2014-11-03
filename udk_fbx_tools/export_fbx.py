@@ -22,18 +22,20 @@
 # based on the fbx export script included in < v2.68 
 # original script created by and copyright (c) Campbell Barton
 #
-# Changes:
-# - tangent + binormal calculation based on Lengyel's Method with support for quads
+# Changes by isathar:
+#
+# - tangent + binormal calculation based on Lengyel's Method
 # - custom normals and smoothing groups support
 # - Normals are exported as PerPolyVertex
 # - list lookup speed optimizations
 # - XNA tweaks disabled for now
-# - optional support for asdn's Recalc Vertex Normals addon
+# - support for asdn's Recalc Vertex Normals addon
 #
-#  UDK-specific:
+#  UE-specific:
 # - uses b_root as root bone instead of creating another one
+#	- some changes made to rotation handling to accomodate for this
 # - axis conversion options altered
-# - tangent space very close to UDK's and xNormal's
+# - tangent space very close to UDK's and xNormal's (default)
 
 
 
@@ -233,8 +235,9 @@ def save_single(operator, scene, filepath="",
 		context_objects=None,
 		object_types={'EMPTY', 'CAMERA', 'LAMP', 'ARMATURE', 'MESH'},
 		use_mesh_modifiers=False,
-		axis_setting='STATICMESH',
 		mesh_smooth_type='FACE',
+		export_rootbonename='b_root',
+		export_skeletonname='Armature',
 		use_armature_deform_only=False,
 		use_anim=False,
 		use_anim_optimize=False,
@@ -345,9 +348,10 @@ def save_single(operator, scene, filepath="",
 		def getAnimParRelMatrix(self, frame):
 			#arm_mat = self.fbxArm.matrixWorld
 			#arm_mat = self.fbxArm.parRelMatrix()
+
 			if not self.parent:
-				#return mtx4_z90 * (self.getPoseMatrix(frame) * arm_mat) # dont apply arm matrix anymore
-				return self.getPoseMatrix(frame) * mtx4_z90
+				# UE Rotation fix
+				return self.getPoseMatrix(frame) * mtx4_z90 * Matrix.Rotation(math.pi / 2.0, 4, 'Y')
 			else:
 				#return (mtx4_z90 * ((self.getPoseMatrix(frame) * arm_mat)))  *  (mtx4_z90 * (self.parent.getPoseMatrix(frame) * arm_mat)).inverted()
 				return (self.parent.getPoseMatrix(frame) * mtx4_z90).inverted() * ((self.getPoseMatrix(frame)) * mtx4_z90)
@@ -417,7 +421,7 @@ def save_single(operator, scene, filepath="",
 				matrix_rot = ((global_matrix * self.fbxParent.__anim_poselist[frame]).inverted() * (global_matrix * self.__anim_poselist[frame])).to_3x3()
 			else:
 				matrix_rot = (global_matrix * self.__anim_poselist[frame]).to_3x3()
-
+			
 			# Lamps need to be rotated
 			if obj_type == 'LAMP':
 				matrix_rot = matrix_rot * mtx_x90
@@ -480,11 +484,13 @@ def save_single(operator, scene, filepath="",
 		Matrix mod is so armature objects can modify their bone matrices
 		"""
 		if isinstance(ob, bpy.types.Bone):
-
-			# we know we have a matrix
-			# matrix = mtx4_z90 * (ob.matrix['ARMATURESPACE'] * matrix_mod)
-			matrix = ob.matrix_local * mtx4_z90  # dont apply armature matrix anymore
-
+			# UE - specific rotation fix - will probably mess up custom axis settings, still testing
+			if ob.name == export_rootbonename:
+				matrix = ob.matrix_local * mtx4_z90 * Matrix.Rotation(math.pi / 2.0, 4, 'Y')
+			else:
+				matrix = ob.matrix_local * mtx4_z90 
+			
+			# no rotation changes needed here since root bone's rotation is applied to rest of skeleton
 			parent = ob.parent
 			if parent:
 				#par_matrix = mtx4_z90 * (parent.matrix['ARMATURESPACE'] * matrix_mod)
@@ -538,7 +544,7 @@ def save_single(operator, scene, filepath="",
 		matrix_mod is only used for bones at the moment
 		"""
 		loc, rot, scale, matrix, matrix_rot = object_tx(ob, loc, matrix, matrix_mod)
-
+		
 		fw('\n\t\t\tProperty: "Lcl Translation", "Lcl Translation", "A+",%.15f,%.15f,%.15f' % loc)
 		fw('\n\t\t\tProperty: "Lcl Rotation", "Lcl Rotation", "A+",%.15f,%.15f,%.15f' % tuple_rad_to_deg(rot))
 		fw('\n\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%.15f,%.15f,%.15f' % scale)
@@ -584,7 +590,7 @@ def save_single(operator, scene, filepath="",
 			constraints = get_constraints(pose_bone)
 		else:
 			constraints = get_constraints(ob)
-
+		
 		# if the type is 0 its an empty otherwise its a mesh
 		# only difference at the moment is one has a color
 		fw('''
@@ -1426,15 +1432,9 @@ def save_single(operator, scene, filepath="",
 	def write_mesh(my_mesh):
 		
 		#Gather mesh data
-		
 		me = my_mesh.blenData
-		
-		# init test var
-		#bm = bmesh.new()
-		#bm.from_mesh(me)
-		
 		meshobject = my_mesh.blenObject
-
+		
 		# if there are non NULL materials on this mesh
 		do_materials = bool(my_mesh.blenMaterials)
 		do_textures = bool(my_mesh.blenTextures)
@@ -1467,8 +1467,9 @@ def save_single(operator, scene, filepath="",
 		use_smoothinggroups = (mesh_smooth_type == 'GROUPS' and ("UCX_" not in meshobject.name))
 		
 		# rotation matrix for normals
-		normaltranslate = axis_conversion(from_forward='-Z',from_up='Y',to_forward='Y',to_up='Z') if axis_setting == 'SKELMESH' else 1.0
+		#normaltranslate = axis_conversion(from_forward='-Z',from_up='Y',to_forward='Y',to_up='Z') if axis_setting == 'SKELMESH' else 1.0
 		usedefaultnormals = (normals_export_mode == 'AUTO')
+		
 		#################
 		# Normals:
 		
@@ -1499,36 +1500,36 @@ def save_single(operator, scene, filepath="",
 							
 							if tempdist < 0.01:
 								
-								faceverts += [Vector(vd.vpos)]
+								faceverts.append(Vector(vd.vpos))
 								tempnorm = vd.vnormal
 								tempvec = Vector((0.0,0.0,0.0))
 								tempvec[0] = tempnorm[0]
 								tempvec[1] = tempnorm[1]
 								tempvec[2] = tempnorm[2]
-								normvec = tempvec * normaltranslate
+								normvec = tempvec # * normaltranslate
 								
-								me_normals += [normvec]
+								me_normals.append(normvec)
 								if use_tangents:
-									me_normals_unproc += [tempvec]
+									me_normals_unproc.append(tempvec)
 									if vcount == 0:
-										uvface += [uvlayer[i].uv1]
-										uv_vertcoords += [Vector(uvlayer[i].uv1)]
+										uvface.append(uvlayer[i].uv1)
+										uv_vertcoords.append(Vector(uvlayer[i].uv1))
 									elif vcount == 1:
-										uvface += [uvlayer[i].uv2]
-										uv_vertcoords += [Vector(uvlayer[i].uv2)]
+										uvface.append(uvlayer[i].uv2)
+										uv_vertcoords.append(Vector(uvlayer[i].uv2))
 									elif vcount == 2:
-										uvface += [uvlayer[i].uv3]
-										uv_vertcoords += [Vector(uvlayer[i].uv3)]
+										uvface.append(uvlayer[i].uv3)
+										uv_vertcoords.append(Vector(uvlayer[i].uv3))
 									elif vcount == 3:
-										uvface += [uvlayer[i].uv4]
-										uv_vertcoords += [Vector(uvlayer[i].uv4)]
+										uvface.append(uvlayer[i].uv4)
+										uv_vertcoords.append(Vector(uvlayer[i].uv4))
 								
-								vindices += [j]
+								vindices.append(j)
 								vcount += 1
 					if use_tangents:
 						for k in range(vcount):
 							tempheading = calc_uvtanbase(uvface, faceverts)
-							uvverts_list += [tempheading]
+							uvverts_list.append(tempheading)
 			else:
 				print("Couldn't find vertex_normals, reverting to default")
 				usedefaultnormals = True
@@ -1550,96 +1551,100 @@ def save_single(operator, scene, filepath="",
 					vcount = 0
 					
 					for j in mf.vertices:
-						faceverts += [Vector(me_vertices[j].co)]
+						faceverts.append(Vector(me_vertices[j].co))
 					
 						tempnorm = meshobject.vertex_normal_list[j].normal
 						tempvec = Vector((0.0,0.0,0.0))
 						tempvec[0] = tempnorm[0]
 						tempvec[1] = tempnorm[1]
 						tempvec[2] = tempnorm[2]
-						normvec = tempvec * normaltranslate
+						normvec = tempvec # * normaltranslate
 						
-						me_normals += [normvec]
+						me_normals.append(normvec)
 						
 						if use_tangents:
-							me_normals_unproc += [tempvec]
+							me_normals_unproc.append(tempvec)
 							if vcount == 0:
-								uvface += [uvlayer[i].uv1]
-								uv_vertcoords += [Vector(uvlayer[i].uv1)]
+								uvface.append(uvlayer[i].uv1)
+								uv_vertcoords.append(Vector(uvlayer[i].uv1))
 							elif vcount == 1:
-								uvface += [uvlayer[i].uv2]
-								uv_vertcoords += [Vector(uvlayer[i].uv2)]
+								uvface.append(uvlayer[i].uv2)
+								uv_vertcoords.append(Vector(uvlayer[i].uv2))
 							elif vcount == 2:
-								uvface += [uvlayer[i].uv3]
-								uv_vertcoords += [Vector(uvlayer[i].uv3)]
+								uvface.append(uvlayer[i].uv3)
+								uv_vertcoords.append(Vector(uvlayer[i].uv3))
 							elif vcount == 3:
-								uvface += [uvlayer[i].uv4]
-								uv_vertcoords += [Vector(uvlayer[i].uv4)]
+								uvface.append(uvlayer[i].uv4)
+								uv_vertcoords.append(Vector(uvlayer[i].uv4))
 						
-						vindices += [j]
+						vindices.append(j)
 						vcount += 1
 					
 					if use_tangents:
 						for k in range(vcount):
 							tempheading = calc_uvtanbase(uvface, faceverts)
-							uvverts_list += [tempheading]
-						
+							uvverts_list.append(tempheading)
 						
 			else:
-				print("Couldn't find vertex_normals, reverting to default")
+				print("Couldn't find vertex_normal_list, reverting to default")
 				usedefaultnormals = True
 
 		#######################################################################
 		# default / fallback
 		if usedefaultnormals:
 			uvlayer = []
-			if use_tangents:
-				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
 			
 			for i in range(len(me_faces)):
 				mf = me_faces[i]
 				
 				tempverts = [fv for fv in mf.vertices]
-				
-				faceverts = []
 				uvface = []
-				vcount = 0
 				
 				for j in range(len(tempverts)):
-					faceverts += [Vector(me_vertices[tempverts[j]].co)]
-					
 					tempnorm = me_vertices[tempverts[j]].normal
 					tempvec = Vector((0.0,0.0,0.0))
 					tempvec[0] = tempnorm[0]
 					tempvec[1] = tempnorm[1]
 					tempvec[2] = tempnorm[2]
-					normvec = tempvec * normaltranslate
+					normvec = tempvec
 					
-					me_normals += [normvec]
+					me_normals.append(normvec)
+					me_normals_unproc.append(tempvec)
 					
-					if use_tangents:
-						me_normals_unproc += [tempvec]
-						if vcount == 0:
-							uvface += [uvlayer[i].uv1]
-							uv_vertcoords += [Vector(uvlayer[i].uv1)]
-						elif vcount == 1:
-							uvface += [uvlayer[i].uv2]
-							uv_vertcoords += [Vector(uvlayer[i].uv2)]
-						elif vcount == 2:
-							uvface += [uvlayer[i].uv3]
-							uv_vertcoords += [Vector(uvlayer[i].uv3)]
-						elif vcount == 3:
-							uvface += [uvlayer[i].uv4]
-							uv_vertcoords += [Vector(uvlayer[i].uv4)]
-					
-					vindices += [tempverts[j]]
-					vcount += 1
+			if use_tangents:
 				
-				if use_tangents:
+				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
+				
+				for i in range(len(me_faces)):
+					mf = me_faces[i]
+					
+					tempverts = [fv for fv in mf.vertices]
+					
+					faceverts = []
+					uvface = []
+					vcount = 0
+					
+					for j in range(len(tempverts)):
+						faceverts.append(Vector(me_vertices[tempverts[j]].co))
+						
+						if vcount == 0:
+							uvface.append(uvlayer[i].uv1)
+							uv_vertcoords.append(Vector(uvlayer[i].uv1))
+						elif vcount == 1:
+							uvface.append(uvlayer[i].uv2)
+							uv_vertcoords.append(Vector(uvlayer[i].uv2))
+						elif vcount == 2:
+							uvface.append(uvlayer[i].uv3)
+							uv_vertcoords.append(Vector(uvlayer[i].uv3))
+						elif vcount == 3:
+							uvface.append(uvlayer[i].uv4)
+							uv_vertcoords.append(Vector(uvlayer[i].uv4))
+					
+						vindices.append(tempverts[j])
+						vcount += 1
+				
 					for k in range(vcount):
-						tempheading = calc_uvtanbase(uvface, faceverts)
-						uvverts_list += [tempheading]
-		
+						uvverts_list.append(calc_uvtanbase(uvface, faceverts))
 		
 		##############################################################
 		# Tangents + Binormals calculation:
@@ -1649,9 +1654,6 @@ def save_single(operator, scene, filepath="",
 			print("UV length mismatch: Tangents calculation disabled.")
 		
 		if use_tangents:
-			#print("uvverts_list length: " + str(len(uvverts_list)) + ", need " + str(len(me_normals)))
-			#print("Calculating Tangents and Binormals...")
-			
 			for i in range(len(me_normals)):
 				tan = uvverts_list[i]
 				norm = me_normals_unproc[i]
@@ -1659,9 +1661,10 @@ def save_single(operator, scene, filepath="",
 				temptan = (tan - (norm * norm.dot(tan))).normalized()
 				tempbinormal = norm.cross(temptan)
 				
-				me_tangents += [temptan]
-				me_binormals += [tempbinormal * normaltranslate]
-		
+				
+				me_tangents.append(temptan)
+				me_binormals.append(tempbinormal)
+			
 
 			procflist = []
 			numverts = len(me_vertices)
@@ -1677,7 +1680,7 @@ def save_single(operator, scene, filepath="",
 				newindices = []
 				otherindices = []
 				otherotherindices = []
-				otherotherotherindices = []# 	:)
+				otherotherotherindices = []
 				
 				avgcount = 0
 				otheravgcount = 0
@@ -1695,8 +1698,8 @@ def save_single(operator, scene, filepath="",
 					if vindices[j] == i:
 						if avgcount < 1:
 							lastuvindex = j
-							procflist += [me_tangents[j]]
-							newindices += [j]
+							procflist.append(me_tangents[j])
+							newindices.append(j)
 							avgcount += 1
 						else:
 							tempUV1 = uv_vertcoords[j]
@@ -1705,8 +1708,8 @@ def save_single(operator, scene, filepath="",
 							#print("tempdist = " + str(tempdist))
 							if tempdist < 0.01:
 								lastuvindex = j
-								procflist += [me_tangents[j]]
-								newindices += [j]
+								procflist.append(me_tangents[j])
+								newindices.append(j)
 								avgcount += 1
 							else:
 								if otherlastuvindex > -1:
@@ -1715,8 +1718,8 @@ def save_single(operator, scene, filepath="",
 									tempdist2 = math.sqrt(((tempUV12[0] - tempUV22[0]) ** 2) + ((tempUV12[1] - tempUV22[1]) ** 2))
 									if tempdist2 < 0.01:
 										otherlastuvindex = j
-										procflist2 += [me_tangents[j]]
-										otherindices += [j]
+										procflist2.append(me_tangents[j])
+										otherindices.append(j)
 										otheravgcount += 1
 									else:
 										if otherotherlastuvindex > -1:
@@ -1725,22 +1728,22 @@ def save_single(operator, scene, filepath="",
 											tempdist3 = math.sqrt(((tempUV13[0] - tempUV23[0]) ** 2) + ((tempUV13[1] - tempUV23[1]) ** 2))
 											if tempdist3 < 0.01:
 												otherotherlastuvindex = j
-												procflist3 += [me_tangents[j]]
-												otherotherindices += [j]
+												procflist3.append(me_tangents[j])
+												otherotherindices.append(j)
 												otherotheravgcount += 1
 											else:
-												procflist4 += [me_tangents[j]]
-												otherotherotherindices += [j]
+												procflist4.append(me_tangents[j])
+												otherotherotherindices.append(j)
 												otherotherotheravgcount += 1
 										else:
 											otherotherlastuvindex = j
-											procflist3 += [me_tangents[j]]
-											otherotherindices += [j]
+											procflist3.append(me_tangents[j])
+											otherotherindices.append(j)
 											otherotheravgcount += 1
 								else:
 									otherlastuvindex = j
-									procflist2 += [me_tangents[j]]
-									otherindices += [j]
+									procflist2.append(me_tangents[j])
+									otherindices.append(j)
 									otheravgcount += 1
 				
 				# average the lists
@@ -1779,7 +1782,17 @@ def save_single(operator, scene, filepath="",
 								for ti4 in otherotherotherindices:
 									me_tangents[ti4] = tempvect
 									me_binormals[ti4] = (me_normals_unproc[ti4].cross(tempvect))
-				
+			
+			procflist = []
+			procflist2 = []
+			procflist3 = []
+			procflist4 = []
+			
+			newindices = []
+			otherindices = []
+			otherotherindices = []
+			otherotherotherindices = []
+			
 		######################################
 						
 		####################################
@@ -1795,12 +1808,13 @@ def save_single(operator, scene, filepath="",
 						tempsg = tempsg + 1
 					else:
 						tempsg = tempsg * 2
-				me_smoothgroups += [tempsg]
+				me_smoothgroups.append(tempsg)
 				#me_smoothgroups += [sg.fsgroup]
 				#print(str(sg.sgroup) + " --> " + str(tempsg))
-
-
-		poseMatrix = write_object_props(my_mesh.blenObject, None, my_mesh.parRelMatrix())[3]
+		
+		# UE Rotation fix - needs to be rotated by -X instead of Y here for some reason...
+		# - this is a fix for normals/tangents being rotated after the root bone changes
+		poseMatrix = write_object_props(my_mesh.blenObject, None, meshobject.matrix_world * Matrix.Rotation(-(math.pi / 2.0), 4, 'X'))[3]
 
 		# Calculate the global transform for the mesh in the bind pose the same way we do
 		# in write_sub_deformer_skin
@@ -2847,8 +2861,8 @@ Objects:  {''')
 
 	# XNA requires the armature to be a Limb (JCB)
 	# Note, 2.58 and previous wrote these as normal empties and it worked mostly (except for XNA)
-	for my_arm in ob_arms:
-		write_null(my_arm, fbxType="Limb", fbxTypeFlags="Skeleton")
+	#for my_arm in ob_arms:
+	#	write_null(my_arm, fbxType="Limb", fbxTypeFlags="Skeleton")
 
 	for my_cam in ob_cameras:
 		write_camera(my_cam)
@@ -3031,6 +3045,7 @@ Connections:  {''')
 			if my_ob.fbxParent and (not my_ob.fbxArm):
 				fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_ob.fbxName, my_ob.fbxParent.fbxName))
 			else:
+				#if my_ob.fbxName != "Armature":
 				fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % my_ob.fbxName)
 
 	if materials:
@@ -3072,10 +3087,10 @@ Connections:  {''')
 		# Always parent to armature now
 		if my_bone.parent:
 			fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_bone.fbxName, my_bone.parent.fbxName))
-		#else:
-			# the armature object is written as an empty and all root level bones connect to it
-		 #   fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_bone.fbxName, my_bone.fbxArm.fbxName))
-
+		else:
+			fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % (my_bone.fbxName))
+		
+		
 	# groups
 	if groups:
 		for ob_generic in ob_all_typegroups:

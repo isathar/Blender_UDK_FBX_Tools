@@ -17,15 +17,15 @@
 # ##### END GPL LICENSE BLOCK #####
 
 bl_info = {
-	"name": "FBX Normals & Smoothing Tools",
+	"name": "UE FBX Normals Tools",
 	"author": "Andreas Wiehn (isathar)",
-	"version": (0, 7, 5),
+	"version": (0, 8, 0),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
-	"description": "Adds editors for smoothing groups and vertex normals,"
-					"as well as an exporter with some UDK-specific optimizations "
-					"that supports both. Also supports tangent and binormal "
-					"calculation/export for custom normals.",
+	"description": "Adds an editor for vertex normals and an exporter "
+					"with some Unreal Engine-specific optimizations. "
+					" Also supports tangent and binormal calculation/export. "
+					"",
 	"warning": "",
 	"wiki_url": "",
 	"tracker_url": "",
