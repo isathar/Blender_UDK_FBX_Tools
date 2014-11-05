@@ -10,7 +10,7 @@ The exporter can also calculate tangents and binormals on export, allowing you t
 *Compatible with Blender v2.70 and up*
 
 Installation:
--------------
+=============
 
 	- Copy the 'udk_fbx_tools' folder to your addons directory.
 	- Find it in the Addon Manager in the 'Mesh' category as 'UE FBX Normals Tools' and enable it.
@@ -19,7 +19,7 @@ Installation:
 
 --------------------------------------------------------------------------
 *Notes:*
---------
+========
 
 - The normals and smoothing groups will not affect your displayed mesh in Blender, only in the exported file
 
@@ -35,10 +35,14 @@ real-time display of normals and my custom angle-based generation algorithm are 
 density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts. I have a 
 pretty good idea of why it's doing this and will try to optimize things some more soon.
 
+*Angle-Based (Custom) Generation mode*
+This isn't really a feature, more of an experiment to see if I can build a normal generation algorithm in python.
+It's really slow, unfinished, and has weird results at the moment, so you probably shouldn't use it...
+
 ---------------------------------------------------------------------------
 
 Features:
----------
+=========
 
 Editor for Vertex Normals:
 --------------------------
@@ -47,7 +51,6 @@ Editor for Vertex Normals:
 	- Automatic generation with several presets for different scenarios
 		-- presets: (More advanced presets for foliage/tree normals should be up soon)
 			--- Smooth (Blender default)
-			--- Angle-Based (slow but customizable algorithm)
 			--- Up-Vector
 			--- Bent (facing away from 3d cursor)
 			--- Ground Foliage (selected ground based vertices point up, everything else bent from an offset point)
@@ -84,37 +87,39 @@ Documentation:
 *Some of this is out of date and will be updated soon*
 
 
-*Main Panel:*
+Main Panel:
+-----------
 
-Export 					- opens the xport menu for the included fbx exporter
+*Export* 					- opens the menu for the included fbx exporter
 
-Initialize 				- creates new custom mesh data object for selected mesh
+*Initialize* 				- creates new custom mesh data object for selected mesh
 
-Reset 					- reset's custom mesh data to defaul
-Clear 					- deletes custom mesh data
+*Reset* 					- reset's custom mesh data to defaul
+*Clear* 					- deletes custom mesh data
 
-Enable/Disable 			- show/hide the normals editor
+*Enable/Disable* 			- show/hide the normals editor
 
-Match Grid 				- sets grid scale and subdivisions to 16 to match the grid to UDK's
-							or resets them to default, UE4 settings should be in the next release
+*Match Grid* 				- sets grid scale and subdivisions to 16 to match the grid to UDK's
+							    or resets them to default, UE4 settings should be in the next release
 
 
 
-*Exporter:*
+Exporter:
+---------
 
 Altered export settings:
 
-Up/Forward Axis 		- Allows flipping the mesh's matrix for 
+*Up/Forward Axis* 		- Allows flipping the mesh's matrix for 
 
-Normals 				- Default 		- Blender generates normals
+*Normals* 				- Default 		- Blender generates normals
 						- From Editor 	- Custom nromals from the included Vertex Normals Editor
 						- asdsn's Addon - export normals from the Recalc Vertex Normals addon
 
-Tangents + Binormals 	- calculate and export tangents + 'binormals' for the mesh
+*Tangents + Binormals* 	- calculate and export tangents + 'binormals' for the mesh
 
 *New Option, Required for skeletal meshes if you don't want weird rotations on import*
 
-Root Bone				- change this to the name of your mesh's root bone if exporting a skeletal mesh.
+*Root Bone*				- change this to the name of your mesh's root bone if exporting a skeletal mesh.
 
 
 
@@ -125,7 +130,7 @@ Root Bone				- change this to the name of your mesh's root bone if exporting a s
 Vertex Normals Editor:
 -----------------------
 
-To enable:
+*To enable:*
 
 	- Go to the UDK FBX Tool panel, click Initialize
 	- Click Enable under 'Vertex Normals'
@@ -133,15 +138,13 @@ To enable:
 
 *Manual editing:*
 
-Poly:
-
+*Poly:*
 	- select a vertex or set of vertices on the same face,
 	- set the face index in the textbox below the normal coordinate,
 	- set the x,y,z, normal coordinate to whatever you want,
 	- click set
 
-Vertex:
-
+*Vertex:*
 	- make sure 'Edit All' is checked,
 	- same steps as per-poly, but face index is not used
 
@@ -152,23 +155,23 @@ checking 'Real-Time' will change the normal as you change the coordinates in the
 
 -select a mode from the dropdown menu.
 - overview of modes:
-	- 'Smooth (Default)'
+	- *'Smooth (Default)'*
 		-- generates Blender's default normals + copies to custom data 
-	- 'Up-Vector'
+	- *'Up-Vector'*
 		-- normals point up, early experiment into grass lighting
-	- 'Bent'
+	- *'Bent'*
 		-- normals point away from 3d cursor location
 		-- good for tree foliage when used with 'Selected Only'
 		-- Checking 'Use Backfaces' will calculate normals facing the opposite direction for faces that are not selected (for 2-sided planes)
-	- 'Ground Foliage'
+	- *'Ground Foliage'*
 		-- good for grass planes - normals on selected vertices point up, everything else away from 'Center Offset'
 			- lowering the Center Offset's Z-value will lower the amount by which upper normals are bent, making the shading look less 'round'
 		-- if 'Ignore Hidden' is set, you can hide parts of the mesh and generate only for visible faces
 		-- This mode produces the best results with a two-sided mesh, but a 2-sided material will also benefit.
-	- 'Custom (angle-based)'
+	- *'Custom (angle-based)'*
 		-- a customizable algorithm I'm working on to generate normals based on dot product tresholds for face angles
 		-- 'Smoothing Threshold' is the maximum dot product-based difference between the angles of normals on the same face. (0.99 is flat shading, -0.99 is smooth)
-	- 'Edges' and 'Smoothing Groups' settings do nothing yet and will (hopefully) work in a later version.
+	- *'Edges' and 'Smoothing Groups'* settings do nothing yet and will (hopefully) work in a later version.
 
 checking 'Selected Only' will generate normals for selected faces (this is still buggy with the 'Smooth' and 'Custom' algorithms).
 
@@ -177,21 +180,26 @@ checking 'Selected Only' will generate normals for selected faces (this is still
 
 NOTE: This is a work in progress feature and may mess with the vertex order. Pasting overlapping vertices' normals with this will generate errors.
 
-Copy - copies selected vertex normals to buffer
-Paste - pastes buffered normals to vertices found at the same position
+*Copy* 		- copies selected vertex normals to buffer
+*Paste*		- pastes buffered normals to vertices found at the same position
 
 The points of this feature are to reduce seams on modular character meshes and to allow copying of sharp edges from identical meshes with edge splits.
 
 
-Display:
+*Display:*
 
-Options for drawing lines to represent the vertex normals (color, scale, selection only)
+- Options for drawing lines to represent the vertex normals (color, scale, selection only)
 
 
 
 
 =========================================================================================================
-0.8.0
+Changelog: 
+----------
+
+*(not counting the ridiculous amount of edits after updating)*
+
+*0.8.0*
 	- *exporter fixes:*
 	- rewrote the armature bone fix to parent the root bone to the scene (the way the armature object was before)
 	- 	- exported files should now be compatible with nvidia apex tools and anything else that uses fbx
@@ -199,9 +207,10 @@ Options for drawing lines to represent the vertex normals (color, scale, selecti
 	- changed the way axis settings are handled by the exporter and set up separate axis options
 	- exporter speed improvements
 
-0.7.5
+*0.7.5*
 	- fixed Custom (Angle-Based) auto-generation mode. It's slightly slower (as in, it can take about 5 min for a 3600 poly mesh), but should no longer produce weird results on complex meshes.
 	- added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior)
 	- fixed wrong vertex being selected while using manual edit (bad math)
 
-0.7.0	initial release
+*0.7.0*
+	- initial release
