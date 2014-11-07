@@ -5,9 +5,11 @@ Blender addon that adds an editor for custom vertex normals, and an exporter wit
 
 The exporter can also calculate tangents and binormals on export, allowing you to take advantage of the xNormal - UDK synced workflow using Blender.
 
---------------------------------------------------------------------------
+
 
 *Compatible with Blender v2.70 and up*
+
+=============================================================================
 
 Installation:
 =============
@@ -17,7 +19,8 @@ Installation:
 	- There should now be a new tab titled 'FBX Tools' in your tools panel.
 
 
---------------------------------------------------------------------------
+==================================================================================
+
 *Notes:*
 ========
 
@@ -26,11 +29,12 @@ Installation:
 - For meshes to export correctly, you need to apply any changes you made to the mesh's rotation, location or scale before exporting.
 
 *Export Time* 
-I've tweaked the export script's performance a little bit, but complex meshes may still take some time to export.
-Blender will hitch or freeze while exporting, but shouldn't crash :)
+Exporting Tangents can be pretty slow. I've sped the script up a little since the initial release, but it can stil take some time on complex meshes.
+Blender may hitch or freeze while exporting, but shouldn't crash :)
+I'm looking into more performance tweaks for this, but I wouldn't expect any miracles... The current implementation loops through a potentially massive list in Python.
 
 *Editing Performance* 
-I've tested this on meshes with between 6 and 15000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 560ti),
+I've tested this on meshes with between 6 and 35000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 560ti),
 real-time display of normals and my custom angle-based generation algorithm are very slow on anything past 8000 or so polys, depending on the mesh's
 density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts. I have a 
 pretty good idea of why it's doing this and will try to optimize things some more soon.
@@ -39,7 +43,9 @@ pretty good idea of why it's doing this and will try to optimize things some mor
 This isn't really a feature, more of an experiment to see if I can build a normal generation algorithm in python.
 It's really slow, unfinished, and has weird results at the moment, so you probably shouldn't use it...
 
----------------------------------------------------------------------------
+*The smoothing groups editor had some problems and has been disabled for now.*
+
+==================================================================================
 
 Features:
 =========
@@ -76,7 +82,12 @@ Customized FBX Exporter:
 	- Exports animations for both UDK and UE4 properly now
 
 
-*The smoothing groups editor had some problems so it's been disabled for now.*
+Importer for Normals:
+---------------------
+
+	- Allows importing normals from FBX files to the custom variable used in this editor.
+	- Works with multiple meshes at the same time.
+	- The meshes have to already exist in the scene and be identical to the ones in the file (same number of vertices and faces).
 
 
 ==================================================================================
@@ -84,23 +95,26 @@ Customized FBX Exporter:
 Documentation: 
 ===========================
 
-*Some of this is out of date and will be updated soon*
+*Some of this is out of date and is being updated a little bit at a time*
 
 
 Main Panel:
 -----------
 
-*Export* 					- opens the menu for the included fbx exporter
+*Export* 					- Opens the menu for the included fbx exporter
 
-*Initialize* 				- creates new custom mesh data object for selected mesh
+*Import Normals*			- Imports normals from an fbx file and copies them to the editor's custom normals variables for found objects
 
-*Reset* 					- reset's custom mesh data to defaul
-*Clear* 					- deletes custom mesh data
+*Initialize Data* 			- Creates new custom mesh data object for selected mesh
 
-*Enable/Disable* 			- show/hide the normals editor
+*Reset* 					- Reset's custom mesh data to default values
+*Clear* 					- Deletes custom mesh data
 
-*Match Grid* 				- sets grid scale and subdivisions to 16 to match the grid to UDK's
-							    or resets them to default, UE4 settings should be in the next release
+Custom Normals
+*Enable/Disable* 			- Show/hide the normals editor
+
+*Match Grid* 				- Sets grid scale and subdivisions to 16 to match the grid to UDK's
+							    or resets them to default, UE4 settings soon
 
 
 
@@ -119,10 +133,14 @@ Altered export settings:
 
 *New Option, Required for skeletal meshes if you don't want weird rotations on import*
 
-*Root Bone*				- change this to the name of your mesh's root bone if exporting a skeletal mesh.
+*Root Bone*				- Change this to the name of your mesh's root bone if exporting a skeletal mesh.
 
 
 
+Importer:
+---------
+
+*Selected Objects*		- Toggle importing normals for selected meshes or all meshes in the scene
 
 ===================================================================================================
 
@@ -139,41 +157,42 @@ Vertex Normals Editor:
 *Manual editing:*
 
 *Poly:*
-	- select a vertex or set of vertices on the same face,
-	- set the face index in the textbox below the normal coordinate,
-	- set the x,y,z, normal coordinate to whatever you want,
-	- click set
+	- Select a vertex or set of vertices on the same face,
+	- Set the face index in the textbox below the normal coordinate,
+	- Set the x,y,z, normal coordinate to whatever you want,
+	- Click *Set*
 
 *Vertex:*
-	- make sure 'Edit All' is checked,
-	- same steps as per-poly, but face index is not used
+	- Make sure *Edit All* is checked,
+	- Same steps as per-poly, but face index is not used
 
-checking 'Real-Time' will change the normal as you change the coordinates in the box
+*Checking 'Real-Time' will change the normal as you change the coordinates in the box*
 
 
 *Automatic Generation:*
 
--select a mode from the dropdown menu.
-- overview of modes:
+- Select a mode from the dropdown menu.
+
+- Overview of modes:
 	- *'Smooth (Default)'*
-		-- generates Blender's default normals + copies to custom data 
-	- *'Up-Vector'*
-		-- normals point up, early experiment into grass lighting
+		-- Generates Blender's default normals + copies to custom data 
+	- *'By Vector'*
+		-- All normals point in the specified direction, defaults to Up
 	- *'Bent'*
-		-- normals point away from 3d cursor location
-		-- good for tree foliage when used with 'Selected Only'
+		-- Normals point away from 3d cursor location
+		-- Good for tree foliage when used with 'Selected Only'
 		-- Checking 'Use Backfaces' will calculate normals facing the opposite direction for faces that are not selected (for 2-sided planes)
 	- *'Ground Foliage'*
-		-- good for grass planes - normals on selected vertices point up, everything else away from 'Center Offset'
-			- lowering the Center Offset's Z-value will lower the amount by which upper normals are bent, making the shading look less 'round'
-		-- if 'Ignore Hidden' is set, you can hide parts of the mesh and generate only for visible faces
+		-- Good for grass planes - normals on selected vertices point up, everything else away from 'Center Offset'
+			- Lowering the Center Offset's Z-value will lower the amount by which upper normals are bent, making the shading look less 'round'
+		-- If 'Ignore Hidden' is set, you can hide parts of the mesh and generate only for visible faces
 		-- This mode produces the best results with a two-sided mesh, but a 2-sided material will also benefit.
 	- *'Custom (angle-based)'*
-		-- a customizable algorithm I'm working on to generate normals based on dot product tresholds for face angles
+		-- A customizable algorithm I'm working on to generate normals based on dot product tresholds for face angles
 		-- 'Smoothing Threshold' is the maximum dot product-based difference between the angles of normals on the same face. (0.99 is flat shading, -0.99 is smooth)
-	- *'Edges' and 'Smoothing Groups'* settings do nothing yet and will (hopefully) work in a later version.
 
-checking 'Selected Only' will generate normals for selected faces (this is still buggy with the 'Smooth' and 'Custom' algorithms).
+- Checking *Selected Only* will generate normals for selected faces (this is still buggy with the 'Smooth' and 'Custom' algorithms).
+
 
 
 *Transfer Normals:*
@@ -196,21 +215,34 @@ The points of this feature are to reduce seams on modular character meshes and t
 =========================================================================================================
 Changelog: 
 ----------
+*(not counting the ridiculous amount of edits after each update)*
 
-*(not counting the ridiculous amount of edits after updating)*
+
+*0.9.0*
+
+	- added importer for normals only
+	- *exporter:*
+	- more exporter performance improvements
+	- changed the way normals etc are exported
+	- removed vertex sorting stuff from normals export since it should all be handled by the editor now
 
 *0.8.0*
-	- *exporter fixes:*
+
+	- *exporter:*
 	- rewrote the armature bone fix to parent the root bone to the scene (the way the armature object was before)
 	- 	- exported files should now be compatible with nvidia apex tools and anything else that uses fbx
 	- 	- no more messing with UDK's imported mesh rotations
-	- changed the way axis settings are handled by the exporter and set up separate axis options
+	- changed the way axis settings are handled during export and set up separate axis options
 	- exporter speed improvements
 
 *0.7.5*
+
+	- *editor:*
 	- fixed Custom (Angle-Based) auto-generation mode. It's slightly slower (as in, it can take about 5 min for a 3600 poly mesh), but should no longer produce weird results on complex meshes.
-	- added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior)
 	- fixed wrong vertex being selected while using manual edit (bad math)
+	- *exporter:*
+	- added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior)
 
 *0.7.0*
+
 	- initial release

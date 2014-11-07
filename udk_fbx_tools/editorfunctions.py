@@ -59,9 +59,9 @@ def set_vertnormal_byloc(vertnorm, vloc, listobject):
 			break
 
 def get_vert_fromloc(verts_list, vloc):
-	for i in range(len(verts_list)):
-		if in_distance(verts_list[i].co, vloc, 0.0001):
-			return verts_list[i]
+	for i in verts_list:
+		if in_distance(i.co, vloc, 0.0001):
+			return i
 	return []
 	
 
@@ -75,14 +75,14 @@ def get_facesforvert(listobject, vertloc):
 		for j in range(len(listobject[i].vdata)):
 			if not foundone:
 				if in_distance(vertloc, listobject[i].vdata[j].vpos, 0.0001):
-					indices += [i]
+					indices.append(i)
 					foundone = True
 	return indices
 
 # returns index of poly in list
 def find_bycenter(listobject, fcenter):
-	for i in range(len(listobject)):
-		if in_distance(listobject[i].fcenter, fcenter, 0.0001):
+	for i in listobject:
+		if in_distance(i.fcenter, fcenter, 0.0001):
 			return i
 	return -1
 
@@ -90,14 +90,13 @@ def find_bycenter(listobject, fcenter):
 def update_face_inlist(oldface, newface):
 	oldface.fcenter = newface.fcenter
 	oldface.fnormal = newface.fnormal
-	oldface.fsgroup = newface.fsgroup
 	oldface.vcount = newface.vcount
 	
 	oldface.vdata.clear()
-	for i in range(len(newface.vdata)):
+	for i in newface.vdata:
 		updface = oldface.vdata.add()
-		updface.vnormal = newface.vdata[i].vnormal
-		updface.vpos = newface.vdata[i].vpos
+		updface.vnormal = i.vnormal
+		updface.vpos = i.vpos
 
 def replace_byindex(olddata, newdata, index):
 	oldfdata = olddata[index]
@@ -105,7 +104,6 @@ def replace_byindex(olddata, newdata, index):
 	
 	oldfdata.fcenter = newfdata.fcenter
 	oldfdata.fnormal = newfdata.fnormal
-	oldfdata.fsgroup = newdata.fsgroup
 	oldfdata.vcount = newfdata.vcount
 	
 	for i in range(len(oldfdata.vdata)):
@@ -119,30 +117,27 @@ def replace_byindex(olddata, newdata, index):
 # writes normals data to list from specified vertex list
 def write_frompoly(listobject, vlist):
 	listobject.clear()
-	for i in range(len(vlist)):
+	for i in vlist:
 		n = listobject.add()
-		n.vnormal = prepare_vector(vlist[i].normal)
-		n.vpos = vlist[i].co
+		n.vnormal = prepare_vector(i.normal)
+		n.vpos = i.co
 
 # transfers data between vdata lists
 def write_normals_fromlist(oldlist, newlist):
-	for i in range(len(oldlist)):
-		n = oldlist[i]
-		n.vnormal = newlist.vnormal
-		n.vpos = newlist.vpos
+	for i in oldlist:
+		i.vnormal = newlist.vnormal
+		i.vpos = newlist.vpos
 
 # get vnormals as list
 def get_polynormal_forvert(vertloc, listobject):
 	normlist = []
 	
-	for i in range(len(listobject)):
-		lo = listobject[i]
+	for lo in listobject:
 		foundone = False
-		for j in range(len(lo.vdata)):
+		for vd in lo.vdata:
 			if not foundone:
-				vd = lo.vdata[j]
 				if in_distance(vertloc,vd.vpos,0.0001):
-					normlist += [vd.vnormal]
+					normlist.append(vd.vnormal)
 					foundone = True
 	return normlist
 
@@ -161,13 +156,11 @@ def generate_newnormals(self, context):
 	if bpy.context.window_manager.vn_resetongenerate:
 		bpy.context.object.custom_meshdata.clear()
 
-		for i in range(len(faces_list)):
-			f = faces_list[i]
+		for f in faces_list:
 			faceverts = [v for v in f.verts]
 			tempfacedata = bpy.context.object.custom_meshdata.add()
 			tempfacedata.fcenter = f.calc_center_median()
 			tempfacedata.fnormal = f.normal
-			tempfacedata.fsgroup = 1
 			tempfacedata.vcount = len(faceverts)
 			
 			if 'vdata' not in tempfacedata:
@@ -175,8 +168,7 @@ def generate_newnormals(self, context):
 				
 			for j in range(len(faceverts)):
 				tempvertdata = tempfacedata.vdata.add()
-
-
+			
 			write_frompoly(tempfacedata.vdata, faceverts)
 
 	#############################
@@ -187,17 +179,14 @@ def generate_newnormals(self, context):
 		
 			newfaceslist = []
 			oldselection = []
-			for i in range(len(faces_list)):
-				f = faces_list[i]
-				
+			for f in faces_list:
 				if f.select:
-					oldselection += [f]
+					oldselection.append(f)
 					for v in f.verts:
 						if v.select:
 							v.select = False
 					
-			for i in range(len(oldselection)):
-				f = oldselection[i]
+			for f in oldselection:
 				f.select = False
 				f2 = f.copy()
 				f2.select = True
@@ -207,19 +196,15 @@ def generate_newnormals(self, context):
 			#bpy.ops.mesh.subdivide(number_cuts=2, smoothness=1.0, quadtri=False, quadcorner='STRAIGHT_CUT', fractal=0.0, fractal_along_normal=0.0, seed=0)
 			
 			updated_faces_list = [f for f in bm.faces]
-			for i in range(len(updated_faces_list)):
-				f = updated_faces_list[i]
-				
+			for f in updated_faces_list:
 				if f.select:
 					f.normal_update()
-					newfaceslist += [f]
+					newfaceslist.append(f)
 			
-			for i in range(len(newfaceslist)):
-				f = newfaceslist[i]
+			for f in newfaceslist:
 				tempfacedata = bpy.context.window_manager.temp_meshdata.add()
 				tempfacedata.fcenter = f.calc_center_median()
 				tempfacedata.fnormal = f.normal
-				tempfacedata.fsgroup = 1
 				tempverts = [v for v in f.verts]
 				tempfacedata.vcount = len(tempverts)
 				
@@ -232,9 +217,9 @@ def generate_newnormals(self, context):
 				write_frompoly(tempfacedata.vdata, tempverts)
 			
 			verts_list = [v for v in bm.verts]
-			for i in range(len(bpy.context.window_manager.temp_meshdata)):
+			
+			for tn in bpy.context.window_manager.temp_meshdata:
 				vertslist = []
-				tn = bpy.context.window_manager.temp_meshdata[i]
 				tempindex = find_bycenter(bpy.context.object.custom_meshdata[:], tn.fcenter)
 				
 				if tempindex > -1:
@@ -244,21 +229,17 @@ def generate_newnormals(self, context):
 			
 			bpy.context.window_manager.temp_meshdata.clear()
 		else:
-			for i in range(len(faces_list)):
-				f = faces_list[i]
+			for f in faces_list:
 				faceverts = f.verts[:]
-				for j in range(len(faceverts)):
-					v = faceverts[j]
+				for v in faceverts:
 					v.normal_update()
 			
 			bpy.context.object.custom_meshdata.clear()
-			for i in range(len(faces_list)):
-				f = faces_list[i]
+			for f in faces_list:
 				faceverts = [v for v in f.verts]
 				tempfacedata = bpy.context.object.custom_meshdata.add()
 				tempfacedata.fcenter = f.calc_center_median()
 				tempfacedata.fnormal = f.normal
-				tempfacedata.fsgroup = 1
 				tempfacedata.vcount = len(faceverts)
 				
 				if 'vdata' not in tempfacedata:
@@ -266,8 +247,7 @@ def generate_newnormals(self, context):
 					
 				for j in range(len(faceverts)):
 					tempvertdata = tempfacedata.vdata.add()
-
-
+				
 				write_frompoly(tempfacedata.vdata, faceverts)
 
 	###############################
@@ -342,21 +322,23 @@ def generate_newnormals(self, context):
 			bpy.context.window_manager.temp_meshdata.clear()
 			selectedlist = []
 			
-			# Pass 1 - Faces
+			# Pass 1 - Get face normal
 			for j in range(len(bpy.context.object.custom_meshdata)):
 				vn = bpy.context.object.custom_meshdata[j]
 				tempface = bpy.context.window_manager.temp_meshdata.add()
 				
 				fnormal = vn.fnormal
 				
+				isSelected = faces_list[j].select
+				
 				for k in range(len(vn.vdata)):
-					if faces_list[j].select:
-						selectedlist += [1]
+					if isSelected:
+						selectedlist.append(1)
 						vd = vn.vdata[k]
 						v = get_vert_fromloc(verts_list, vd.vpos)
 						vd.vnormal = wipnormalslist[j]
 					else:
-						selectedlist += [0]
+						selectedlist.append(0)
 				
 				update_face_inlist(tempface, vn)
 			
@@ -366,18 +348,19 @@ def generate_newnormals(self, context):
 				vn = bpy.context.object.custom_meshdata[j]
 				fnormal = vn.fnormal
 				
-				for k in range(len(vn.vdata)):
+				tempnorms = []
+				tempnorms = get_polynormal_forvert(vn.vdata[0].vpos, bpy.context.window_manager.temp_meshdata)
+				
+				for vd in vn.vdata:
 					if selectedlist[vertcount] > 0:
-						vd = vn.vdata[k]
-						tempnorms = []
+						
+						avg = []
+						
 						v = get_vert_fromloc(verts_list, vd.vpos)
 
-						tempnorms = get_polynormal_forvert(vd.vpos, bpy.context.window_manager.temp_meshdata)
-						avg = []
-
-						for i in range(len(tempnorms)):
-							if in_angle(Vector(tempnorms[i]), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
-								avg += [tempnorms[i]]
+						for vdvn in tempnorms:
+							if in_angle(Vector(vdvn), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
+								avg.append(vdvn)
 						if len(avg) > 0:
 							vd.vnormal = get_average(avg).normalized()
 						else:
@@ -408,22 +391,20 @@ def generate_newnormals(self, context):
 				vn = bpy.context.object.custom_meshdata[j]
 				fnormal = vn.fnormal
 				
-				for k in range(len(vn.vdata)):
-					vd = vn.vdata[k]
-					tempnorms = []
+				tempnorms = []
+				tempnorms = get_polynormal_forvert(vn.vdata[0].vpos, bpy.context.window_manager.temp_meshdata)
+				
+				for vd in vn.vdata:
 					v = get_vert_fromloc(verts_list, vd.vpos)
-
-					tempnorms = get_polynormal_forvert(vd.vpos, bpy.context.window_manager.temp_meshdata)
 					avg = []
-
-					for i in range(len(tempnorms)):
-						if in_angle(Vector(tempnorms[i]), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
-							avg += [tempnorms[i]]
+					
+					for vdvn in tempnorms:
+						if in_angle(Vector(vdvn), Vector(vd.vnormal), bpy.context.window_manager.vn_anglebased_dot_vert):
+							avg.append(vdvn)
 					if len(avg) > 0:
 						vd.vnormal = get_average(avg).normalized()
 					else:
 						vd.vnormal = fnormal
-
 	
 	me.update()
 
@@ -439,8 +420,7 @@ def reset_normals(self, context):
 	bpy.context.window_manager.temp_meshdata.clear()
 	bpy.context.object.custom_meshdata.clear()
 	
-	for i in range(len(faces_list)):
-		f = faces_list[i]
+	for f in faces_list:
 		tempverts = [v for v in f.verts]
 		
 		tempfacedata = bpy.context.object.custom_meshdata.add()
@@ -448,15 +428,14 @@ def reset_normals(self, context):
 		tempfacedata.fcenter = f.calc_center_median()
 		tempfacedata.fnormal = f.normal
 		tempfacedata.vcount = len(tempverts)
-		tempfacedata.fsgroup = 1
 		
 		if 'vdata' not in tempfacedata:
 			tempfacedata['vdata'] = []
 			
-		for j in range(len(tempverts)):
+		for j in tempverts:
 			tempvertdata = tempfacedata.vdata.add()
-			tempvertdata.vpos = tempverts[j].co
-			tempvertdata.vnormal = tempverts[j].normal
+			tempvertdata.vpos = j.co
+			tempvertdata.vnormal = j.normal
 
 		write_frompoly(tempfacedata.vdata, tempverts)
 
@@ -496,37 +475,18 @@ def draw_vertex_normals(self, context):
 	col = bpy.context.window_manager.vn_displaycolor
 	dispcol = (col[0],col[1],col[2],1.0)
 	
-	selected_list = []
-	if bpy.context.window_manager.vndisp_selectiononly:
-		#if bpy.context.window_manager.shownormalsbyface:
-		selected_list = [f.index for f in bm.faces if f.select]
-		#else:
-		#	selected_list = [v.co for v in bm.verts if v.select]
-	
-	normals_list = []
-	if bpy.context.window_manager.vndisp_selectiononly:
-		#if bpy.context.window_manager.shownormalsbyface:
-		for i in selected_list:
-			normals_list += [bpy.context.object.custom_meshdata[i]]
-		#else:
-		#	for vp in selected_list:
-		#		normals_list += [get_polynormal_forvert(vp, bpy.context.object.custom_meshdata)]
-	else:
-		normals_list = [vnf for vnf in bpy.context.object.custom_meshdata]
-	
 	bgl.glEnable(bgl.GL_BLEND)
 	
-	for i in range(len(normals_list)):
-		#if bpy.context.window_manager.vndisp_selectiononly and not bpy.context.window_manager.shownormalsbyface:
-		#	for k in range(len(normals_list[i])):
-		#		draw_line(selected_list[i], Vector(normals_list[i][k]), dispcol, 1.5, dispscale)
-		#else:
-		vdlist = [vd for vd in normals_list[i].vdata]
-		for j in range(len(vdlist)):
-			draw_line(vdlist[j].vpos, vdlist[j].vnormal, dispcol, 1.5, dispscale)
-			
-			
-	
+	fcount = 0
+	for m in bpy.context.object.custom_meshdata:
+		if bpy.context.window_manager.vndisp_selectiononly:
+			if bm.faces[fcount].select:
+				for v in m.vdata:
+					draw_line(v.vpos, v.vnormal, dispcol, 1.5, dispscale)
+		else:
+			for v in m.vdata:
+				draw_line(v.vpos, v.vnormal, dispcol, 1.5, dispscale)
+		fcount += 1
 	bgl.glDisable(bgl.GL_BLEND)
 
 

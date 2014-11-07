@@ -222,8 +222,7 @@ def meshNormalizedWeights(ob, me):
 
 header_comment = \
 '''; FBX 6.1.0 project file
-; Created by Blender FBX Exporter
-; for support mail: ideasman42@gmail.com
+; Created by Blender FBX Exporter Customized
 ; ----------------------------------------------------
 
 '''
@@ -233,11 +232,13 @@ header_comment = \
 def save_single(operator, scene, filepath="",
 		global_matrix=None,
 		context_objects=None,
-		object_types={'EMPTY', 'CAMERA', 'LAMP', 'ARMATURE', 'MESH'},
+		object_types={'ARMATURE', 'MESH'},
 		use_mesh_modifiers=False,
 		mesh_smooth_type='FACE',
+		normals_export_mode='AUTO',
+		export_tangentspace_base='NONE',
+		use_tsmoothing_type2=False,
 		export_rootbonename='b_root',
-		export_skeletonname='Armature',
 		use_armature_deform_only=False,
 		use_anim=False,
 		use_anim_optimize=False,
@@ -245,8 +246,6 @@ def save_single(operator, scene, filepath="",
 		use_anim_action_all=False,
 		use_mesh_edges=False,
 		use_default_take=False,
-		normals_export_mode='AUTO',
-		export_tangents=True,
 	):
 
 	import bpy_extras.io_utils
@@ -1425,12 +1424,82 @@ def save_single(operator, scene, filepath="",
 		
 			tangentdir = (tangentdir + tangentdir2) * 0.5
 		
-		
 		return tangentdir
+	
+	def write_normals(normalsList):
+		fw('''
+		LayerElementNormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Normals: ''')
+
+		i = -1
+		for v in normalsList:
+			if i == -1:
+				fw('%.6f,%.6f,%.6f' % v[:])
+				i = 0
+			else:
+				if i == 2:
+					fw('\n\t\t\t ')
+					i = 0
+				fw(',%.6f,%.6f,%.6f'% v[:])
+			i += 1
+		fw('\n\t\t}')
+		
+		return {'Finished'}
+	
+	def write_binormals(binormalsList):
+		fw('''
+		LayerElementBinormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Binormals: ''')
+
+		i = -1
+		for v in binormalsList:
+			if i == -1:
+				fw('%.6f,%.6f,%.6f' % v[:])
+				i = 0
+			else:
+				if i == 2:
+					fw('\n\t\t\t ')
+					i = 0
+				fw(',%.6f,%.6f,%.6f'% v[:])
+			i += 1
+		fw('\n\t\t}')
+		
+		return {'Finished'}
+	
+	def write_tangents(tangentsList):
+		fw('''
+		LayerElementTangent: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Tangents: ''')
+
+		i = -1
+		for v in tangentsList:
+			if i == -1:
+				fw('%.6f,%.6f,%.6f' % v[:])
+				i = 0
+			else:
+				if i == 2:
+					fw('\n\t\t\t ')
+					i = 0
+				fw(',%.6f,%.6f,%.6f'% v[:])
+			i += 1
+		fw('\n\t\t}')
+		
+		return {'Finished'}
 	
 	
 	def write_mesh(my_mesh):
-		
 		#Gather mesh data
 		me = my_mesh.blenData
 		meshobject = my_mesh.blenObject
@@ -1442,128 +1511,140 @@ def save_single(operator, scene, filepath="",
 		do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
 						my_mesh.blenObject.data.shape_keys and
 						len(my_mesh.blenObject.data.vertices) == len(me.vertices))
-
+		
 		fw('\n\tModel: "Model::%s", "Mesh" {' % my_mesh.fbxName)
 		fw('\n\t\tVersion: 232')  # newline is added in write_object_props
-
-		# convert into lists once.	- added list lookup optimization
+		
 		me_vertices = [v for v in me.vertices]
 		me_edges = [e for e in me.edges] if use_mesh_edges else ()
 		me_faces = [f for f in me.tessfaces]
 		
 		# base lists for new features:
 		me_normals = []
-		me_normals_unproc = []
 		me_tangents = []
 		me_binormals = []
-		me_smoothgroups = []
 		
 		uvverts_list = []
-		
 		uv_vertcoords = []
 		vindices = []
+		uvlayer = []
 		
-		use_tangents = (export_tangents and ("UCX_" not in meshobject.name) and (len(me.tessface_uv_textures) > 0))
-		use_smoothinggroups = (mesh_smooth_type == 'GROUPS' and ("UCX_" not in meshobject.name))
+		export_tangents = False
+		is_collision = ("UCX_" in meshobject.name)
 		
-		# rotation matrix for normals
-		#normaltranslate = axis_conversion(from_forward='-Z',from_up='Y',to_forward='Y',to_up='Z') if axis_setting == 'SKELMESH' else 1.0
-		usedefaultnormals = (normals_export_mode == 'AUTO')
+		# no need for tangents on a collision mesh
+		if not is_collision:
+			if export_tangentspace_base != 'NONE':
+				if ("UCX_" in meshobject.name) or (len(me.tessface_uv_textures) > 0):
+					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
+					export_tangents = True
+		
+		usedefaultnormals = (normals_export_mode == 'BLEND') or is_collision
 		
 		#################
 		# Normals:
 		
 		#################################################
 		# custom - Included Addon
-		if normals_export_mode == 'C_ISATHAR':
-			if 'custom_meshdata' in meshobject and "UCX_" not in meshobject.name:
-				uvlayer = []
-				if use_tangents:
-					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-				
-				for i in range(len(me_faces)):
-					mf = me_faces[i]
-
-					tempverts = [fv for fv in mf.vertices]
-					tempvn = meshobject.custom_meshdata[i]
+		
+		if not usedefaultnormals:
+			if 'custom_meshdata' in meshobject and (normals_export_mode == 'C_ISATHAR' or normals_export_mode == 'AUTO'):
+					for i in range(len(meshobject.custom_meshdata)):
+						tempvcount = 0
+						for vd in meshobject.custom_meshdata[i].vdata:
+							if tempvcount < len(me_faces[i].vertices):
+								me_normals.append(Vector(vd.vnormal))
+							tempvcount += 1
 					
-					faceverts = []
-					uvface = []
-					vcount = 0
-					
-					# TBD: need to change this: vertices + list orders should be synced since an earlier fix
-					for j in tempverts:
-						v = me_vertices[j]
-						
-						for vd in tempvn.vdata:
-							tempdist = math.sqrt((v.co[0] - vd.vpos[0])**2 + (v.co[1] - vd.vpos[1])**2 + (v.co[2] - vd.vpos[2])**2) 
+					if export_tangents and export_tangentspace_base == 'LENGY':
+						for i in range(len(meshobject.custom_meshdata)):
+							faceverts = []
+							uvface = []
+							vcount = 0
 							
-							if tempdist < 0.01:
-								
+							for vd in meshobject.custom_meshdata[i].vdata:
 								faceverts.append(Vector(vd.vpos))
-								tempnorm = vd.vnormal
-								tempvec = Vector((0.0,0.0,0.0))
-								tempvec[0] = tempnorm[0]
-								tempvec[1] = tempnorm[1]
-								tempvec[2] = tempnorm[2]
-								normvec = tempvec # * normaltranslate
+									
+								if vcount == 0:
+									uvface.append(uvlayer[i].uv1)
+									uv_vertcoords.append(Vector(uvlayer[i].uv1))
+								elif vcount == 1:
+									uvface.append(uvlayer[i].uv2)
+									uv_vertcoords.append(Vector(uvlayer[i].uv2))
+								elif vcount == 2:
+									uvface.append(uvlayer[i].uv3)
+									uv_vertcoords.append(Vector(uvlayer[i].uv3))
+								elif vcount == 3:
+									uvface.append(uvlayer[i].uv4)
+									uv_vertcoords.append(Vector(uvlayer[i].uv4))
 								
-								me_normals.append(normvec)
-								if use_tangents:
-									me_normals_unproc.append(tempvec)
-									if vcount == 0:
-										uvface.append(uvlayer[i].uv1)
-										uv_vertcoords.append(Vector(uvlayer[i].uv1))
-									elif vcount == 1:
-										uvface.append(uvlayer[i].uv2)
-										uv_vertcoords.append(Vector(uvlayer[i].uv2))
-									elif vcount == 2:
-										uvface.append(uvlayer[i].uv3)
-										uv_vertcoords.append(Vector(uvlayer[i].uv3))
-									elif vcount == 3:
-										uvface.append(uvlayer[i].uv4)
-										uv_vertcoords.append(Vector(uvlayer[i].uv4))
-								
-								vindices.append(j)
+								if vcount < len(me_faces[i].vertices):
+									vindices.append(me_faces[i].vertices[vcount])
 								vcount += 1
-					if use_tangents:
-						for k in range(vcount):
-							tempheading = calc_uvtanbase(uvface, faceverts)
-							uvverts_list.append(tempheading)
-			else:
-				print("Couldn't find vertex_normals, reverting to default")
-				usedefaultnormals = True
-						
-		################################################################
-		# custom - Recalc Vertex Normals script
-		elif normals_export_mode == 'C_ASDN':
-			if 'vertex_normal_list' in meshobject and "UCX_" not in meshobject.name:
-				uvlayer = []
-				if use_tangents:
-					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-					
+							
+							for k in range(vcount):
+								uvverts_list.append(calc_uvtanbase(uvface, faceverts))
+
+								################################################################
+				# custom - Recalc Vertex Normals script
+			
+			elif 'vertex_normal_list' in meshobject and (normals_export_mode == 'C_ASDN' or normals_export_mode == 'AUTO'):
 				for i in range(len(me_faces)):
-					mf = me_faces[i]
-					tempverts = [fv for fv in mf.vertices]
-					
-					faceverts = []
-					uvface = []
-					vcount = 0
-					
-					for j in mf.vertices:
-						faceverts.append(Vector(me_vertices[j].co))
-					
-						tempnorm = meshobject.vertex_normal_list[j].normal
-						tempvec = Vector((0.0,0.0,0.0))
-						tempvec[0] = tempnorm[0]
-						tempvec[1] = tempnorm[1]
-						tempvec[2] = tempnorm[2]
-						normvec = tempvec # * normaltranslate
+					for j in me_faces[i].vertices:
+						me_normals.append(Vector(meshobject.vertex_normal_list[j].normal))
+				
+				if export_tangents:
+					for i in range(len(me_faces)):
+						faceverts = []
+						uvface = []
+						vcount = 0
 						
-						me_normals.append(normvec)
+						for j in me_faces[i].vertices:
+							faceverts.append(Vector(me_vertices[j].co))
+							
+							if export_tangentspace_base == 'LENGY':
+								if vcount == 0:
+									uvface.append(uvlayer[i].uv1)
+									uv_vertcoords.append(Vector(uvlayer[i].uv1))
+								elif vcount == 1:
+									uvface.append(uvlayer[i].uv2)
+									uv_vertcoords.append(Vector(uvlayer[i].uv2))
+								elif vcount == 2:
+									uvface.append(uvlayer[i].uv3)
+									uv_vertcoords.append(Vector(uvlayer[i].uv3))
+								elif vcount == 3:
+									uvface.append(uvlayer[i].uv4)
+									uv_vertcoords.append(Vector(uvlayer[i].uv4))
+							
+							vindices.append(j)
+							vcount += 1
 						
-						if use_tangents:
-							me_normals_unproc.append(tempvec)
+						if export_tangentspace_base == 'LENGY':
+							for k in range(vcount):
+								tempheading = calc_uvtanbase(uvface, faceverts)
+								uvverts_list.append(tempheading)
+							
+			else:
+				usedefaultnormals = True
+		
+		#######################################################################
+		# default / fallback / collision
+		
+		if usedefaultnormals:
+			for i in range(len(me_faces)):
+				for j in me_faces[i].vertices:
+					me_normals.append(Vector(me_vertices[j].normal))
+			
+			if export_tangents:
+				if export_tangentspace_base == 'LENGY':
+					for i in range(len(me_faces)):
+						faceverts = []
+						uvface = []
+						vcount = 0
+						
+						for j in me_faces[i].vertices:
+							faceverts.append(Vector(me_vertices[j].co))
+							
 							if vcount == 0:
 								uvface.append(uvlayer[i].uv1)
 								uv_vertcoords.append(Vector(uvlayer[i].uv1))
@@ -1576,257 +1657,199 @@ def save_single(operator, scene, filepath="",
 							elif vcount == 3:
 								uvface.append(uvlayer[i].uv4)
 								uv_vertcoords.append(Vector(uvlayer[i].uv4))
-						
-						vindices.append(j)
-						vcount += 1
-					
-					if use_tangents:
-						for k in range(vcount):
-							tempheading = calc_uvtanbase(uvface, faceverts)
-							uvverts_list.append(tempheading)
-						
-			else:
-				print("Couldn't find vertex_normal_list, reverting to default")
-				usedefaultnormals = True
-
-		#######################################################################
-		# default / fallback
-		if usedefaultnormals:
-			uvlayer = []
-			
-			for i in range(len(me_faces)):
-				mf = me_faces[i]
-				
-				tempverts = [fv for fv in mf.vertices]
-				uvface = []
-				
-				for j in range(len(tempverts)):
-					tempnorm = me_vertices[tempverts[j]].normal
-					tempvec = Vector((0.0,0.0,0.0))
-					tempvec[0] = tempnorm[0]
-					tempvec[1] = tempnorm[1]
-					tempvec[2] = tempnorm[2]
-					normvec = tempvec
-					
-					me_normals.append(normvec)
-					me_normals_unproc.append(tempvec)
-					
-			if use_tangents:
-				
-				uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-				
-				for i in range(len(me_faces)):
-					mf = me_faces[i]
-					
-					tempverts = [fv for fv in mf.vertices]
-					
-					faceverts = []
-					uvface = []
-					vcount = 0
-					
-					for j in range(len(tempverts)):
-						faceverts.append(Vector(me_vertices[tempverts[j]].co))
-						
-						if vcount == 0:
-							uvface.append(uvlayer[i].uv1)
-							uv_vertcoords.append(Vector(uvlayer[i].uv1))
-						elif vcount == 1:
-							uvface.append(uvlayer[i].uv2)
-							uv_vertcoords.append(Vector(uvlayer[i].uv2))
-						elif vcount == 2:
-							uvface.append(uvlayer[i].uv3)
-							uv_vertcoords.append(Vector(uvlayer[i].uv3))
-						elif vcount == 3:
-							uvface.append(uvlayer[i].uv4)
-							uv_vertcoords.append(Vector(uvlayer[i].uv4))
-					
-						vindices.append(tempverts[j])
-						vcount += 1
-				
-					for k in range(vcount):
-						uvverts_list.append(calc_uvtanbase(uvface, faceverts))
-		
-		##############################################################
-		# Tangents + Binormals calculation:
-
-		if len(uvverts_list) != len(me_normals):
-			use_tangents = False
-			print("UV length mismatch: Tangents calculation disabled.")
-		
-		if use_tangents:
-			for i in range(len(me_normals)):
-				tan = uvverts_list[i]
-				norm = me_normals_unproc[i]
-				
-				temptan = (tan - (norm * norm.dot(tan))).normalized()
-				tempbinormal = norm.cross(temptan)
-				
-				
-				me_tangents.append(temptan)
-				me_binormals.append(tempbinormal)
-			
-
-			procflist = []
-			numverts = len(me_vertices)
-			
-			
-			# smooth by vertex average (removes jitter)
-			for i in range(numverts):
-				procflist = []
-				procflist2 = []
-				procflist3 = []
-				procflist4 = []
-				
-				newindices = []
-				otherindices = []
-				otherotherindices = []
-				otherotherotherindices = []
-				
-				avgcount = 0
-				otheravgcount = 0
-				otherotheravgcount = 0
-				otherotherotheravgcount = 0
-				
-				lastuvindex = -1
-				otherlastuvindex = -1
-				otherotherlastuvindex = -1
-				
-				# make lists of vertices depending on uv borders
-				# 4 uv seams / vertex max for now, 
-				# TBD: need to rewrite to be less convoluted
-				for j in range(len(vindices)):
-					if vindices[j] == i:
-						if avgcount < 1:
-							lastuvindex = j
-							procflist.append(me_tangents[j])
-							newindices.append(j)
-							avgcount += 1
-						else:
-							tempUV1 = uv_vertcoords[j]
-							tempUV2 = uv_vertcoords[lastuvindex]
-							tempdist = math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2))
-							#print("tempdist = " + str(tempdist))
-							if tempdist < 0.01:
-								lastuvindex = j
-								procflist.append(me_tangents[j])
-								newindices.append(j)
-								avgcount += 1
-							else:
-								if otherlastuvindex > -1:
-									tempUV12 = uv_vertcoords[j]
-									tempUV22 = uv_vertcoords[otherlastuvindex]
-									tempdist2 = math.sqrt(((tempUV12[0] - tempUV22[0]) ** 2) + ((tempUV12[1] - tempUV22[1]) ** 2))
-									if tempdist2 < 0.01:
-										otherlastuvindex = j
-										procflist2.append(me_tangents[j])
-										otherindices.append(j)
-										otheravgcount += 1
-									else:
-										if otherotherlastuvindex > -1:
-											tempUV13 = uv_vertcoords[j]
-											tempUV23 = uv_vertcoords[otherotherlastuvindex]
-											tempdist3 = math.sqrt(((tempUV13[0] - tempUV23[0]) ** 2) + ((tempUV13[1] - tempUV23[1]) ** 2))
-											if tempdist3 < 0.01:
-												otherotherlastuvindex = j
-												procflist3.append(me_tangents[j])
-												otherotherindices.append(j)
-												otherotheravgcount += 1
-											else:
-												procflist4.append(me_tangents[j])
-												otherotherotherindices.append(j)
-												otherotherotheravgcount += 1
-										else:
-											otherotherlastuvindex = j
-											procflist3.append(me_tangents[j])
-											otherotherindices.append(j)
-											otherotheravgcount += 1
-								else:
-									otherlastuvindex = j
-									procflist2.append(me_tangents[j])
-									otherindices.append(j)
-									otheravgcount += 1
-				
-				# average the lists
-				if avgcount > 0:
-					tempvect = Vector((0.0,0.0,0.0))
-					for l in range(len(procflist)):
-						tempvect = tempvect + Vector(procflist[l])
-					tempvect = tempvect / (avgcount * 1.0)
-					for ti in newindices:
-						me_tangents[ti] = tempvect
-						me_binormals[ti] = (me_normals_unproc[ti].cross(tempvect))
-					
-					if otheravgcount > 0:
-						tempvect = Vector((0.0,0.0,0.0))
-						for l in range(len(procflist2)):
-							tempvect = tempvect + Vector(procflist2[l])
-						tempvect = tempvect / (otheravgcount * 1.0)
-						for ti2 in otherindices:
-							me_tangents[ti2] = tempvect
-							me_binormals[ti2] = (me_normals_unproc[ti2].cross(tempvect))
 							
-						if otherotheravgcount > 0:
-							tempvect = Vector((0.0,0.0,0.0))
-							for l in range(len(procflist3)):
-								tempvect = tempvect + Vector(procflist3[l])
-							tempvect = tempvect / (otherotheravgcount * 1.0)
-							for ti3 in otherotherindices:
-								me_tangents[ti3] = tempvect
-								me_binormals[ti3] = (me_normals_unproc[ti3].cross(tempvect))
-								
-							if otherotherotheravgcount > 0:
-								tempvect = Vector((0.0,0.0,0.0))
-								for l in range(len(procflist4)):
-									tempvect = tempvect + Vector(procflist4[l])
-								tempvect = tempvect / (otherotherotheravgcount * 1.0)
-								for ti4 in otherotherotherindices:
-									me_tangents[ti4] = tempvect
-									me_binormals[ti4] = (me_normals_unproc[ti4].cross(tempvect))
-			
-			procflist = []
-			procflist2 = []
-			procflist3 = []
-			procflist4 = []
-			
-			newindices = []
-			otherindices = []
-			otherotherindices = []
-			otherotherotherindices = []
-			
-		######################################
+							vindices.append(j)
+							vcount += 1
 						
-		####################################
-		# smoothing groups
-		if use_smoothinggroups:
-			
-			print("Converting Smoothing groups...")
-			for i in range(len(meshobject.custom_meshdata)):
-				sg = meshobject.custom_meshdata[i]
-				tempsg = 0
-				for i in range(sg.fsgroup):
-					if (tempsg <= 1):
-						tempsg = tempsg + 1
-					else:
-						tempsg = tempsg * 2
-				me_smoothgroups.append(tempsg)
-				#me_smoothgroups += [sg.fsgroup]
-				#print(str(sg.sgroup) + " --> " + str(tempsg))
+						for k in range(vcount):
+							uvverts_list.append(calc_uvtanbase(uvface, faceverts))
 		
-		# UE Rotation fix - needs to be rotated by -X instead of Y here for some reason...
-		# - this is a fix for normals/tangents being rotated after the root bone changes
+		uvlayer = []
+		##############################################################
+		# Tangents + Binormals:
+		
+		if export_tangents:
+			if export_tangentspace_base == 'LENGY':
+				if len(uvverts_list) != len(me_normals):
+					print("UV length mismatch: Tangents calculation disabled.")
+				else :
+					for i in range(len(me_normals)):
+						tan = uvverts_list[i]
+						norm = me_normals[i]
+						
+						temptan = (tan - (norm * norm.dot(tan))).normalized()
+						
+						me_tangents.append(temptan)
+						me_binormals.append(norm.cross(temptan))
+					
+					uvverts_list = []
+					# tangent smoothing
+					# slow - iterates through each vertex + creates lists for the smoothing pass
+					# smoothing is based on faces + uv islands that share the vertices
+					for i in range(len(me_vertices)):
+						oneseamlist = []
+						twoseamslist = []
+						threeseamslist = []
+						fourseamslist = []
+						
+						oneseamindices = []
+						twoseamindices = []
+						threeseamindices = []
+						fourseamindices = []
+						
+						oneseamavgcount = 0
+						twoseamavgcount = 0
+						threeseamavgcount = 0
+						fourseamavgcount = 0
+						
+						oneseamlastindex = -1
+						twoseamlastindex = -1
+						threeseamlastindex = -1
+						
+						# Gather pass (4 uv seams / vertex max)
+						for j in range(len(vindices)):
+							if vindices[j] == i:
+								if oneseamavgcount < 1:
+									oneseamlastindex = j
+									oneseamlist.append(me_tangents[j])
+									oneseamindices.append(j)
+									oneseamavgcount += 1
+								else:
+									tempUV1 = uv_vertcoords[j]
+									tempUV2 = uv_vertcoords[oneseamlastindex]
+									if math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2)) < 0.01:
+										oneseamlastindex = j
+										oneseamlist.append(me_tangents[j])
+										oneseamindices.append(j)
+										oneseamavgcount += 1
+									else:
+										if twoseamlastindex > -1:
+											tempUV1 = uv_vertcoords[j]
+											tempUV2 = uv_vertcoords[twoseamlastindex]
+											if math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2)) < 0.01:
+												twoseamlastindex = j
+												twoseamslist.append(me_tangents[j])
+												twoseamindices.append(j)
+												twoseamavgcount += 1
+											else:
+												if threeseamlastindex > -1:
+													tempUV1 = uv_vertcoords[j]
+													tempUV2 = uv_vertcoords[threeseamlastindex]
+													if math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2)) < 0.01:
+														threeseamlastindex = j
+														threeseamslist.append(me_tangents[j])
+														threeseamindices.append(j)
+														threeseamavgcount += 1
+													else:
+														fourseamslist.append(me_tangents[j])
+														fourseamindices.append(j)
+														fourseamavgcount += 1
+												else:
+													threeseamlastindex = j
+													threeseamslist.append(me_tangents[j])
+													threeseamindices.append(j)
+													threeseamavgcount += 1
+										else:
+											twoseamlastindex = j
+											twoseamslist.append(me_tangents[j])
+											twoseamindices.append(j)
+											twoseamavgcount += 1
+						
+						
+						# averages the lists for this vert (smoothing pass)
+						if use_tsmoothing_type2:
+							# more smoothing than UDK, slower
+							if oneseamavgcount > 0:
+								tempvect = Vector((0.0,0.0,0.0))
+								for l in range(len(oneseamlist)):
+									tempvect = tempvect + oneseamlist[l]
+								tempvect = tempvect / float(oneseamavgcount)
+								for ti in oneseamindices:
+									me_tangents[ti] = tempvect
+									me_binormals[ti] = me_normals[ti].cross(tempvect)
+								
+							if twoseamavgcount > 0:
+								tempvect = Vector((0.0,0.0,0.0))
+								for l in range(len(twoseamslist)):
+									tempvect = tempvect + twoseamslist[l]
+								tempvect = tempvect / float(twoseamavgcount)
+								for ti2 in twoseamindices:
+									me_tangents[ti2] = tempvect
+									me_binormals[ti2] = me_normals[ti2].cross(tempvect)
+									
+							if threeseamavgcount > 0:
+								tempvect = Vector((0.0,0.0,0.0))
+								for l in range(len(threeseamslist)):
+									tempvect = tempvect + threeseamslist[l]
+								tempvect = tempvect / float(threeseamavgcount)
+								for ti3 in threeseamindices:
+									me_tangents[ti3] = tempvect
+									me_binormals[ti3] = me_normals[ti3].cross(tempvect)
+									
+							if fourseamavgcount > 0:
+								tempvect = Vector((0.0,0.0,0.0))
+								for l in range(len(fourseamslist)):
+									tempvect = tempvect + fourseamslist[l]
+								tempvect = tempvect / float(fourseamavgcount)
+								for ti4 in fourseamindices:
+									me_tangents[ti4] = tempvect
+									me_binormals[ti4] = me_normals[ti4].cross(tempvect)
+						else:
+							# closer to UDK
+							if oneseamavgcount > 0:
+								tempvect = Vector((0.0,0.0,0.0))
+								for l in range(len(oneseamlist)):
+									tempvect = tempvect + oneseamlist[l]
+								tempvect = tempvect / float(oneseamavgcount)
+								for ti in oneseamindices:
+									me_tangents[ti] = tempvect
+									me_binormals[ti] = me_normals[ti].cross(tempvect)
+								
+								if twoseamavgcount > 0:
+									tempvect = Vector((0.0,0.0,0.0))
+									for l in range(len(twoseamslist)):
+										tempvect = tempvect + twoseamslist[l]
+									tempvect = tempvect / float(twoseamavgcount)
+									for ti2 in twoseamindices:
+										me_tangents[ti2] = tempvect
+										me_binormals[ti2] = me_normals[ti2].cross(tempvect)
+										
+									if threeseamavgcount > 0:
+										tempvect = Vector((0.0,0.0,0.0))
+										for l in range(len(threeseamslist)):
+											tempvect = tempvect + threeseamslist[l]
+										tempvect = tempvect / float(threeseamavgcount)
+										for ti3 in threeseamindices:
+											me_tangents[ti3] = tempvect
+											me_binormals[ti3] = me_normals[ti3].cross(tempvect)
+											
+										if fourseamavgcount > 0:
+											tempvect = Vector((0.0,0.0,0.0))
+											for l in range(len(fourseamslist)):
+												tempvect = tempvect + fourseamslist[l]
+											tempvect = tempvect / float(fourseamavgcount)
+											for ti4 in fourseamindices:
+												me_tangents[ti4] = tempvect
+												me_binormals[ti4] = me_normals[ti4].cross(tempvect)
+		
+		uv_vertcoords = []
+		######################################
+		
+		# UE Skeleton Rotation fix - needs to be rotated by -X instead of Y here for some reason...
+		# - this is a fix for normals being rotated after the root bone changes
 		poseMatrix = write_object_props(my_mesh.blenObject, None, meshobject.matrix_world * Matrix.Rotation(-(math.pi / 2.0), 4, 'X'))[3]
-
+		
 		# Calculate the global transform for the mesh in the bind pose the same way we do
 		# in write_sub_deformer_skin
 		globalMeshBindPose = my_mesh.matrixWorld * mtx4_z90
 		pose_items.append((my_mesh.fbxName, globalMeshBindPose))
-
+		
 		if do_shapekeys:
 			for kb in my_mesh.blenObject.data.shape_keys.key_blocks[1:]:
 				fw('\n\t\t\tProperty: "%s", "Number", "AN",0' % kb.name)
-
+		
 		fw('\n\t\t}')
-
+		
 		fw('\n\t\tMultiLayer: 0'
 		   '\n\t\tMultiTake: 1'
 		   '\n\t\tShading: Y'
@@ -1835,9 +1858,10 @@ def save_single(operator, scene, filepath="",
 		
 		############################################
 		# Write the Real Mesh data here
+		
 		fw('\n\t\tVertices: ')
 		i = -1
-
+		
 		for v in me_vertices:
 			if i == -1:
 				fw('%.6f,%.6f,%.6f' % v.co[:])
@@ -1848,7 +1872,7 @@ def save_single(operator, scene, filepath="",
 					i = 0
 				fw(',%.6f,%.6f,%.6f' % v.co[:])
 			i += 1
-
+		
 		fw('\n\t\tPolygonVertexIndex: ')
 		i = -1
 		for f in me_faces:
@@ -1870,13 +1894,12 @@ def save_single(operator, scene, filepath="",
 				else:
 					fw(',%i,%i,%i,%i' % (fi[0], fi[1], fi[2], fi[3] ^ -1))
 			i += 1
-
+		
 		# write loose edges as faces.
 		for ed in me_edges:
 			if ed.is_loose:
 				ed_val = ed.vertices[:]
 				ed_val = ed_val[0], ed_val[-1] ^ -1
-
 				if i == -1:
 					fw('%i,%i' % ed_val)
 					i = 0
@@ -1886,7 +1909,7 @@ def save_single(operator, scene, filepath="",
 						i = 0
 					fw(',%i,%i' % ed_val)
 			i += 1
-
+		
 		fw('\n\t\tEdges: ')
 		i = -1
 		for ed in me_edges:
@@ -1899,106 +1922,22 @@ def save_single(operator, scene, filepath="",
 					i = 0
 				fw(',%i,%i' % (ed.vertices[0], ed.vertices[1]))
 			i += 1
-
 		fw('\n\t\tGeometryVersion: 124')
-
+		
+		
 		########################################
 		#		Normals, Tangents, Binormals:
-
-		fw('''
-		LayerElementNormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Normals: ''')
-
-		i = -1
-		for v in me_normals:
-			if i == -1:
-				fw('%.6f,%.6f,%.6f' % v[:])
-				i = 0
-			else:
-				if i == 2:
-					fw('\n\t\t\t ')
-					i = 0
-				fw(',%.6f,%.6f,%.6f'% v[:])
-			i += 1
-		fw('\n\t\t}')
-		if use_tangents:
-			fw('''
-		LayerElementBinormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Binormals: ''')
-
-			i = -1
-			for v in me_binormals:
-				if i == -1:
-					fw('%.6f,%.6f,%.6f' % v[:])
-					i = 0
-				else:
-					if i == 2:
-						fw('\n\t\t\t ')
-						i = 0
-					fw(',%.6f,%.6f,%.6f'% v[:])
-				i += 1
-			fw('\n\t\t}')
-
-			fw('''
-		LayerElementTangent: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Tangents: ''')
-
-			i = -1
-			for v in me_tangents:
-				if i == -1:
-					fw('%.6f,%.6f,%.6f' % v[:])
-					i = 0
-				else:
-					if i == 2:
-						fw('\n\t\t\t ')
-						i = 0
-					fw(',%.6f,%.6f,%.6f'% v[:])
-				i += 1
-			fw('\n\t\t}')
-
+		
+		write_normals(me_normals)
+		if export_tangents:
+			write_binormals(me_binormals)
+			write_tangents(me_tangents)
+		
+		
 		###########################################
 		# Write Smoothing Groups
-		if use_smoothinggroups:
-			
-			fw('''
-		LayerElementSmoothing: 0 {
-			Version: 102
-			Name: ""
-			MappingInformationType: "ByPolygon"
-			ReferenceInformationType: "Direct"
-			Smoothing: ''')
-
-			i = -1
-			print("faces length: " + str(len(me_faces)) + ", SG length: " + str(len(me_smoothgroups)))
-			# for f in me_smoothgroups:
-			
-			for f in me_faces:
-				if i == -1:
-					#fw('%i' % f.sgroup)
-					fw('%i' % me_smoothgroups[f.index])
-					i = 0
-				else:
-					if i == 54:
-						fw('\n\t\t\t ')
-						i = 0
-					fw(',%i' % me_smoothgroups[f.index])
-				i += 1
-
-			fw('\n\t\t}')
-		# Write Face Smoothing
-		elif mesh_smooth_type == 'FACE' or ("UCX_" in meshobject.name):
+		
+		if mesh_smooth_type == 'FACE' or is_collision:
 			fw('''
 		LayerElementSmoothing: 0 {
 			Version: 102
@@ -2021,7 +1960,7 @@ def save_single(operator, scene, filepath="",
 
 			fw('\n\t\t}')
 		# Write Edge Smoothing
-		elif mesh_smooth_type == 'EDGE':
+		elif mesh_smooth_type == 'EDGE' and not is_collision:
 			
 			fw('''
 		LayerElementSmoothing: 0 {
@@ -2046,11 +1985,11 @@ def save_single(operator, scene, filepath="",
 			fw('\n\t\t}')
 		
 		# Write No Smoothing
-		elif mesh_smooth_type == 'OFF':
+		elif mesh_smooth_type == 'OFF' and not is_collision:
 			pass
 		else:
 			raise Exception("invalid mesh_smooth_type: %r" % mesh_smooth_type)
-
+		
 		#####################################################
 		
 		# Write VertexColor Layers
@@ -2062,12 +2001,11 @@ def save_single(operator, scene, filepath="",
 				fw('\n\t\tLayerElementColor: %i {' % colindex)
 				fw('\n\t\t\tVersion: 101')
 				fw('\n\t\t\tName: "%s"' % collayer.name)
-
 				fw('''
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
 			Colors: ''')
-
+				
 				i = -1
 				ii = 0  # Count how many Colors we write
 				print(len(me_faces), len(collayer.data))
@@ -2076,7 +2014,7 @@ def save_single(operator, scene, filepath="",
 						colors = cf.color1[:], cf.color2[:], cf.color3[:], cf.color4[:]
 					else:
 						colors = cf.color1[:], cf.color2[:], cf.color3[:]
-
+					
 					for col in colors:
 						if i == -1:
 							fw('%.4f,%.4f,%.4f,1' % col)
@@ -2088,7 +2026,7 @@ def save_single(operator, scene, filepath="",
 							fw(',%.4f,%.4f,%.4f,1' % col)
 						i += 1
 						ii += 1  # One more Color
-
+				
 				fw('\n\t\t\tColorIndex: ')
 				i = -1
 				for j in range(ii):
@@ -2101,9 +2039,8 @@ def save_single(operator, scene, filepath="",
 							i = 0
 						fw(',%i' % j)
 					i += 1
-
 				fw('\n\t\t}')
-
+		
 		# Write UV and texture layers.
 		uvlayers = []
 		if do_uvs:
@@ -2112,15 +2049,14 @@ def save_single(operator, scene, filepath="",
 				fw('\n\t\tLayerElementUV: %i {' % uvindex)
 				fw('\n\t\t\tVersion: 101')
 				fw('\n\t\t\tName: "%s"' % uvlayer.name)
-
 				fw('''
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
 			UV: ''')
-
+				
 				i = -1
 				ii = 0  # Count how many UVs we write
-
+				
 				for uf in uvlayer.data:
 					# workaround, since uf.uv iteration is wrong atm
 					for uv in uf.uv:
@@ -2134,7 +2070,7 @@ def save_single(operator, scene, filepath="",
 							fw(',%.6f,%.6f' % uv[:])
 						i += 1
 						ii += 1  # One more UV
-
+				
 				fw('\n\t\t\tUVIndex: ')
 				i = -1
 				for j in range(ii):
@@ -2147,39 +2083,39 @@ def save_single(operator, scene, filepath="",
 							i = 0
 						fw(',%i' % j)
 					i += 1
-
+				
 				fw('\n\t\t}')
-
+				
 				if do_textures:
 					fw('\n\t\tLayerElementTexture: %i {' % uvindex)
 					fw('\n\t\t\tVersion: 101')
 					fw('\n\t\t\tName: "%s"' % uvlayer.name)
-
+					
 					if len(my_mesh.blenTextures) == 1:
 						fw('\n\t\t\tMappingInformationType: "AllSame"')
 					else:
 						fw('\n\t\t\tMappingInformationType: "ByPolygon"')
-
+					
 					fw('\n\t\t\tReferenceInformationType: "IndexToDirect"')
 					fw('\n\t\t\tBlendMode: "Translucent"')
 					fw('\n\t\t\tTextureAlpha: 1')
 					fw('\n\t\t\tTextureId: ')
-
+					
 					if len(my_mesh.blenTextures) == 1:
 						fw('0')
 					else:
 						texture_mapping_local = {None: -1}
-
+						
 						i = 0  # 1 for dummy
 						for tex in my_mesh.blenTextures:
 							if tex:  # None is set above
 								texture_mapping_local[tex] = i
 								i += 1
-
+						
 						i = -1
 						for f in uvlayer.data:
 							img_key = f.image
-
+							
 							if i == -1:
 								i = 0
 								fw('%s' % texture_mapping_local[img_key])
@@ -2187,10 +2123,10 @@ def save_single(operator, scene, filepath="",
 								if i == 55:
 									fw('\n			 ')
 									i = 0
-
+								
 								fw(',%s' % texture_mapping_local[img_key])
 							i += 1
-
+						
 				else:
 					fw('''
 		LayerElementTexture: 0 {
@@ -2202,7 +2138,7 @@ def save_single(operator, scene, filepath="",
 			TextureAlpha: 1
 			TextureId: ''')
 				fw('\n\t\t}')
-
+		
 		# Done with UV/textures.
 		if do_materials:
 			fw('\n\t\tLayerElementMaterial: 0 {')
@@ -2966,8 +2902,8 @@ Relations:  {''')
 
 	# Armature must be a Limb for XNA
 	# Note, 2.58 and previous wrote these as normal empties and it worked mostly (except for XNA)
-	for my_arm in ob_arms:
-		fw('\n\tModel: "Model::%s", "Limb" {\n\t}' % my_arm.fbxName)
+	#for my_arm in ob_arms:
+	#	fw('\n\tModel: "Model::%s", "Limb" {\n\t}' % my_arm.fbxName)
 
 	for my_mesh in ob_meshes:
 		fw('\n\tModel: "Model::%s", "Mesh" {\n\t}' % my_mesh.fbxName)
@@ -3045,8 +2981,8 @@ Connections:  {''')
 			if my_ob.fbxParent and (not my_ob.fbxArm):
 				fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_ob.fbxName, my_ob.fbxParent.fbxName))
 			else:
-				#if my_ob.fbxName != "Armature":
-				fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % my_ob.fbxName)
+				if my_ob.fbxName != "Armature":
+					fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % my_ob.fbxName)
 
 	if materials:
 		for my_mesh in ob_meshes:

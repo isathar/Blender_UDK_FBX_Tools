@@ -1,3 +1,22 @@
+# ##### BEGIN GPL LICENSE BLOCK #####
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+#
+# ##### END GPL LICENSE BLOCK #####
+
+
 if "bpy" in locals():
 	import imp
 	if "export_fbx" in locals():
@@ -90,27 +109,29 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			)
 	normals_export_mode = EnumProperty(
 			name="Normals",
-			items=(('AUTO', "Default", "Let Blender generate normals"),
-				   ('C_ASDN', "asdn's Addon", "write normals from Recalc Vertex Normals script"),
-				   ('C_ISATHAR', "From Editor", "write normals from the included Vertex Normals Addon"),
+			items=(('BLEND', "Default", "Let Blender generate normals"),
+				   ('C_ASDN', "asdn's Recalc Vertex Normals", "write normals from Recalc Vertex Normals script"),
+				   ('C_ISATHAR', "FBX Tools", "write normals from the included Vertex Normals Addon"),
+				   ('AUTO', "Automatic", "exports normals from automatically detected editor variables (or default)"),
 				   ),
 			default='AUTO',
 			)
-	export_tangents = BoolProperty(
-			name="Tangents + Binormals",
-			description="Calculate and save tangents and binormals",
-			default=True,
+	export_tangentspace_base = EnumProperty(
+			name="Tangents",
+			items=(('LENGY', "Lengyel", "Custom implementation of Lengyel's method"),
+				   ('NONE', " None ", "No tangents will be exported"),
+				   ),
+			default='NONE',
+			)
+	use_tsmoothing_type2 = BoolProperty(
+			name="Tangent Smoothing Type 2",
+			description="Slightly different tangent smoothing calculations for more smoothing",
+			default=False,
 			)
 	export_rootbonename = StringProperty(
 			name="Root Bone",
 			description="The name of your skeleton's root bone",
 			default='b_root',
-			)
-	export_skeletonname = StringProperty(
-			name="Skeleton Name",
-			description="The name of your skeleton/armature",
-			default='Armature',
-			options={'HIDDEN'},
 			)
 	use_armature_deform_only = BoolProperty(
 			name="Only Deform Bones",
@@ -148,7 +169,7 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			soft_min=1, soft_max=16,
 			default=6.0,
 			)
-
+	
 	#hidden options
 	use_mesh_edges = BoolProperty(
 			name="Include Edges",

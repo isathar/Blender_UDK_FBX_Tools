@@ -20,6 +20,7 @@ from bpy.types import Panel
 
 from . import export_menu
 from . import editorfunctions
+from . import import_normals
 
 #########################
 # Main Menu
@@ -48,7 +49,9 @@ class fbxtools_panel(bpy.types.Panel):
 			box = layout.box()
 			row = box.row()
 			row.operator('export_scene.fbx_custom', text='Export')
-					
+			row = box.row()
+			row.operator('object.import_customnormals', text='Import Normals')
+			
 			row = layout.row()
 			label = row.label("  Mesh Data:", 'NONE')
 			if 'custom_meshdata' in bpy.context.object:
@@ -74,19 +77,10 @@ class fbxtools_panel(bpy.types.Panel):
 			label = row.label(" Tweaks:", 'NONE')
 			box = layout.box()
 			row = box.row()
-			
-			
-				
 			if bpy.context.window_manager.tweak_gridsettings_on or (context.space_data.grid_scale < 16.0 or context.space_data.grid_subdivisions < 16.0):
 				row.operator('object.tweak_gridsettings', text='Reset Grid')
 			else:
 				row.operator('object.tweak_gridsettings', text='Match Grid')
-			
-			row = layout.row()
-			label = row.label(" Debug:", 'NONE')
-			row = layout.row()
-			row.operator('object.debug_shownums', text='Show')
-			row = layout.row()
 		else:
 			row = layout.row()
 			label = row.label("Object needs to be a mesh", 'NONE')
@@ -181,21 +175,7 @@ class tweak_gridsettings(bpy.types.Operator):
 		return {'FINISHED'}
 
 
-class debug_shownums(bpy.types.Operator):
-	bl_idname = 'object.debug_shownums'
-	bl_label = 'Debug'
-	bl_description = 'temp debug stuff'
 
-	@classmethod
-	def poll(cls, context):
-		return context.active_object != None and bpy.context.active_object.type == 'MESH'
-
-	def execute(self, context):
-		me = bpy.context.object.data
-		me.update(calc_tessface=True)
-		editorfunctions.debug_getmeshdata(self, me)
-
-		return {'FINISHED'}
 
 
 
@@ -506,9 +486,7 @@ def initdefaults():
 	# 	Generate vars:
 	bpy.types.WindowManager.vn_generatemode = bpy.props.EnumProperty(
 		name="Mode",
-		items=(('GROUPS', "Smoothing Groups", " *NOT IMPLEMENTED* calculate normals from smoothing groups"),
-				('SHARP', "Sharp Edges", " *NOT IMPLEMENTED* calculate normals from edges marked as sharp"),
-				('ANGLES', "Custom (angle-based)", " *EXPERIMENTAL* custom algorithm that calculates normals + sharp edges from customizable dot product thresholds"),
+		items=(('ANGLES', "Custom (angle-based)", " *EXPERIMENTAL* custom algorithm that calculates normals + sharp edges from customizable dot product thresholds"),
 				('POINT', "Bent", "Calculate normals relative to 3d cursor location - good for tree foliage, hair, etc"),
 				('UPVECT', "By Vector", "Calculate normals pointing in a direction specified by an input (Up by default)"),
 				('G_FOLIAGE', "Ground Foliage", "calculate selected normals pointing up, the rest bent from curosr - good for ground foliage"),
@@ -625,7 +603,6 @@ def register():
 	bpy.utils.register_class(reset_polydata)
 	bpy.utils.register_class(clear_polydata)
 	bpy.utils.register_class(enable_vertexnormals)
-	bpy.utils.register_class(debug_shownums)
 	
 	bpy.utils.register_class(tweak_gridsettings)
 	
@@ -639,6 +616,8 @@ def register():
 	bpy.utils.register_class(show_vertexnormals)
 	bpy.utils.register_class(copy_selectednormals)
 	bpy.utils.register_class(paste_selectednormals)
+	
+	bpy.utils.register_class(import_normals.import_customnormals)
 	
 	bpy.utils.register_class(vertex_normals_panel)
 	
@@ -657,9 +636,7 @@ def unregister():
 	
 	bpy.utils.unregister_class(reset_polydata)
 	bpy.utils.unregister_class(clear_polydata)
-	bpy.utils.unregister_class(enable_smoothinggroups)
 	bpy.utils.unregister_class(enable_vertexnormals)
-	bpy.utils.unregister_class(debug_shownums)
 	
 	bpy.utils.unregister_class(tweak_gridsettings)
 	
@@ -671,6 +648,8 @@ def unregister():
 	bpy.utils.unregister_class(show_vertexnormals)
 	bpy.utils.unregister_class(copy_selectednormals)
 	bpy.utils.unregister_class(paste_selectednormals)
+	
+	bpy.utils.unregister_class(import_normals.import_customnormals)
 	
 	bpy.utils.unregister_class(vertex_normals_panel)
 	
