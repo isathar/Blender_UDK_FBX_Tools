@@ -237,7 +237,6 @@ def save_single(operator, scene, filepath="",
 		mesh_smooth_type='FACE',
 		normals_export_mode='AUTO',
 		export_tangentspace_base='NONE',
-		use_tsmoothing_type2=False,
 		export_rootbonename='b_root',
 		use_armature_deform_only=False,
 		use_anim=False,
@@ -1388,7 +1387,7 @@ def save_single(operator, scene, filepath="",
 		uv_distBA = uv2 - uv1
 		uv_distCA = uv3 - uv1
 		
-		uv_distDC = Vector((0.0,0.0))
+		uv_distDA = Vector((0.0,0.0))
 		uv_distAC = Vector((0.0,0.0))
 		if len(uvpoly) > 3:
 			uv_distDA = uv4 - uv1
@@ -1398,7 +1397,7 @@ def save_single(operator, scene, filepath="",
 		p_distBA = v2 - v1
 		p_distCA = v3 - v1
 		
-		p_distDC = Vector((0.0,0.0,0.0))
+		p_distDA = Vector((0.0,0.0,0.0))
 		p_distAC = Vector((0.0,0.0,0.0))
 		if len(polyverts) > 3:
 			p_distAC = v1 - v3
@@ -1757,17 +1756,15 @@ def save_single(operator, scene, filepath="",
 						
 						
 						# averages the lists for this vert (smoothing pass)
-						if use_tsmoothing_type2:
-							# more smoothing than UDK, slower
-							if oneseamavgcount > 0:
-								tempvect = Vector((0.0,0.0,0.0))
-								for l in range(len(oneseamlist)):
-									tempvect = tempvect + oneseamlist[l]
-								tempvect = tempvect / float(oneseamavgcount)
-								for ti in oneseamindices:
-									me_tangents[ti] = tempvect
-									me_binormals[ti] = me_normals[ti].cross(tempvect)
-								
+						if oneseamavgcount > 0:
+							tempvect = Vector((0.0,0.0,0.0))
+							for l in range(len(oneseamlist)):
+								tempvect = tempvect + oneseamlist[l]
+							tempvect = tempvect / float(oneseamavgcount)
+							for ti in oneseamindices:
+								me_tangents[ti] = tempvect
+								me_binormals[ti] = me_normals[ti].cross(tempvect)
+							
 							if twoseamavgcount > 0:
 								tempvect = Vector((0.0,0.0,0.0))
 								for l in range(len(twoseamslist)):
@@ -1777,60 +1774,23 @@ def save_single(operator, scene, filepath="",
 									me_tangents[ti2] = tempvect
 									me_binormals[ti2] = me_normals[ti2].cross(tempvect)
 									
-							if threeseamavgcount > 0:
-								tempvect = Vector((0.0,0.0,0.0))
-								for l in range(len(threeseamslist)):
-									tempvect = tempvect + threeseamslist[l]
-								tempvect = tempvect / float(threeseamavgcount)
-								for ti3 in threeseamindices:
-									me_tangents[ti3] = tempvect
-									me_binormals[ti3] = me_normals[ti3].cross(tempvect)
-									
-							if fourseamavgcount > 0:
-								tempvect = Vector((0.0,0.0,0.0))
-								for l in range(len(fourseamslist)):
-									tempvect = tempvect + fourseamslist[l]
-								tempvect = tempvect / float(fourseamavgcount)
-								for ti4 in fourseamindices:
-									me_tangents[ti4] = tempvect
-									me_binormals[ti4] = me_normals[ti4].cross(tempvect)
-						else:
-							# closer to UDK
-							if oneseamavgcount > 0:
-								tempvect = Vector((0.0,0.0,0.0))
-								for l in range(len(oneseamlist)):
-									tempvect = tempvect + oneseamlist[l]
-								tempvect = tempvect / float(oneseamavgcount)
-								for ti in oneseamindices:
-									me_tangents[ti] = tempvect
-									me_binormals[ti] = me_normals[ti].cross(tempvect)
-								
-								if twoseamavgcount > 0:
+								if threeseamavgcount > 0:
 									tempvect = Vector((0.0,0.0,0.0))
-									for l in range(len(twoseamslist)):
-										tempvect = tempvect + twoseamslist[l]
-									tempvect = tempvect / float(twoseamavgcount)
-									for ti2 in twoseamindices:
-										me_tangents[ti2] = tempvect
-										me_binormals[ti2] = me_normals[ti2].cross(tempvect)
+									for l in range(len(threeseamslist)):
+										tempvect = tempvect + threeseamslist[l]
+									tempvect = tempvect / float(threeseamavgcount)
+									for ti3 in threeseamindices:
+										me_tangents[ti3] = tempvect
+										me_binormals[ti3] = me_normals[ti3].cross(tempvect)
 										
-									if threeseamavgcount > 0:
+									if fourseamavgcount > 0:
 										tempvect = Vector((0.0,0.0,0.0))
-										for l in range(len(threeseamslist)):
-											tempvect = tempvect + threeseamslist[l]
-										tempvect = tempvect / float(threeseamavgcount)
-										for ti3 in threeseamindices:
-											me_tangents[ti3] = tempvect
-											me_binormals[ti3] = me_normals[ti3].cross(tempvect)
-											
-										if fourseamavgcount > 0:
-											tempvect = Vector((0.0,0.0,0.0))
-											for l in range(len(fourseamslist)):
-												tempvect = tempvect + fourseamslist[l]
-											tempvect = tempvect / float(fourseamavgcount)
-											for ti4 in fourseamindices:
-												me_tangents[ti4] = tempvect
-												me_binormals[ti4] = me_normals[ti4].cross(tempvect)
+										for l in range(len(fourseamslist)):
+											tempvect = tempvect + fourseamslist[l]
+										tempvect = tempvect / float(fourseamavgcount)
+										for ti4 in fourseamindices:
+											me_tangents[ti4] = tempvect
+											me_binormals[ti4] = me_normals[ti4].cross(tempvect)
 		
 		uv_vertcoords = []
 		######################################
