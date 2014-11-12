@@ -201,13 +201,6 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 		if not self.filepath:
 			raise Exception("filepath not set")
 
-		#axis_up = 'Y'
-		#axis_forward = '-Z'
-
-		#if self.axis_setting == 'SKELMESH':
-		#	axis_up = 'Z'
-		#	axis_forward = 'Y'
-
 		global_matrix = Matrix()
 
 		global_matrix[0][0] = \
