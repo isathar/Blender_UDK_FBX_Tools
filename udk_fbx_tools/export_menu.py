@@ -16,24 +16,14 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-
 if "bpy" in locals():
 	import imp
 	if "export_fbx" in locals():
 		imp.reload(export_fbx)
 
-
 import bpy
-from bpy.props import (StringProperty,
-					   BoolProperty,
-					   FloatProperty,
-					   EnumProperty,
-					   )
-
-from bpy_extras.io_utils import (ExportHelper,
-								 path_reference_mode,
-								 axis_conversion,
-								 )
+from bpy.props import (StringProperty,BoolProperty,FloatProperty,EnumProperty,)
+from bpy_extras.io_utils import (ExportHelper,path_reference_mode,axis_conversion,)
 
 
 class ExportFBX(bpy.types.Operator, ExportHelper):
@@ -41,13 +31,10 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 	bl_label = "Export FBX Custom"
 	bl_options = {'PRESET'}
 	bl_description = 'Export selection as a .fbx file with customized exporter'
-
+	
 	filename_ext = ".fbx"
 	filter_glob = StringProperty(default="*.fbx", options={'HIDDEN'})
-
-	# List of operator properties, the attributes will be assigned
-	# to the class instance from the operator settings before calling.
-
+	
 	object_types = EnumProperty(
 			name="Object Types",
 			options={'ENUM_FLAG'},
@@ -123,11 +110,6 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 				   ),
 			default='NONE',
 			)
-	use_tsmoothing_type2 = BoolProperty(
-			name="Tangent Smoothing Type 2",
-			description="Slightly different tangent smoothing calculations for more smoothing",
-			default=False,
-			)
 	export_rootbonename = StringProperty(
 			name="Root Bone",
 			description="The name of your skeleton's root bone",
@@ -196,34 +178,25 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 	@property
 	def check_extension(self):
 		return self.batch_mode == 'OFF'
-
+	
 	def check(self, context):
 		is_def_change = super().check(context)
 		return (is_def_change)
-
+	
 	def execute(self, context):
 		from mathutils import Matrix
 		if not self.filepath:
 			raise Exception("filepath not set")
-
-		#axis_up = 'Y'
-		#axis_forward = '-Z'
-
-		#if self.axis_setting == 'SKELMESH':
-		#	axis_up = 'Z'
-		#	axis_forward = 'Y'
-
+		
 		global_matrix = Matrix()
-
 		global_matrix[0][0] = \
 		global_matrix[1][1] = \
 		global_matrix[2][2] = self.global_scale
-
+		
 		global_matrix = (global_matrix * axis_conversion(to_forward=self.axis_forward,to_up=self.axis_up,).to_4x4())
-
+		
 		keywords = self.as_keywords(ignore=("global_scale","check_existing","filter_glob","axis_forward","axis_up"))
-
 		keywords["global_matrix"] = global_matrix
-
+		
 		from . import export_fbx
 		return export_fbx.save(self, context, **keywords)
