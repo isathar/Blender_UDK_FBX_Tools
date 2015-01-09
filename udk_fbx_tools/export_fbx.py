@@ -17,31 +17,32 @@
 # ##### END GPL LICENSE BLOCK #####
 
 
+############
 # NOTES:
 #
-# based on the fbx export script included in < v2.68 
+# based on the fbx export script included in < Blender v2.68 (6.1 ASCII)
 # original script created by and copyright (c) Campbell Barton
 #
 # Changes by isathar:
 #
 # - tangent + binormal calculation based on Lengyel's Method
-# - custom normals and smoothing groups support
+# - custom normals support for fbx normals editor and asdn's Recalc Vertex Normals addon
 # - Normals are exported as PerPolyVertex
 # - list lookup speed optimizations
 # - XNA tweaks disabled for now
-# - support for asdn's Recalc Vertex Normals addon
 #
 #  UE-specific:
-# - uses b_root as root bone instead of creating another one
-#	- some changes made to rotation handling to accomodate for this
+# - uses b_root as root bone instead of creating a new one from Armature
+#	- some changes made to rotation handling to accommodate for this
 # - axis conversion options altered
-# - tangent space very close to UDK's and xNormal's (default)
-
+# - tangent space close to UDK's auto-generated tangents
+#
+##############
 
 
 import os
 import time
-import math  # math.pi
+import math
 
 import bpy
 import bmesh
@@ -1371,37 +1372,17 @@ def save_single(operator, scene, filepath="",
 		uv2 = Vector(uvpoly[1])
 		uv3 = Vector(uvpoly[2])
 		
-		uv4 = Vector((0.0,0.0))
-		if len(uvpoly) > 3:
-			uv4 = Vector(uvpoly[3])
-		
 		v1 = Vector(polyverts[0])
 		v2 = Vector(polyverts[1])
 		v3 = Vector(polyverts[2])
-		
-		v4 = Vector((0.0,0.0,0.0))
-		if len(polyverts) > 3:
-			v4 = Vector(polyverts[3])
 		
 		# get uv distances
 		uv_distBA = uv2 - uv1
 		uv_distCA = uv3 - uv1
 		
-		uv_distDA = Vector((0.0,0.0))
-		uv_distAC = Vector((0.0,0.0))
-		if len(uvpoly) > 3:
-			uv_distDA = uv4 - uv1
-			uv_distAC = uv1 - uv3
-		
 		# get point distances
 		p_distBA = v2 - v1
 		p_distCA = v3 - v1
-		
-		p_distDA = Vector((0.0,0.0,0.0))
-		p_distAC = Vector((0.0,0.0,0.0))
-		if len(polyverts) > 3:
-			p_distAC = v1 - v3
-			p_distDA = v4 - v1
 		
 		# calculate face direction * weight
 		area = (uv_distBA[0] * uv_distCA[1]) - (uv_distBA[1] * uv_distCA[0])
@@ -1412,11 +1393,19 @@ def save_single(operator, scene, filepath="",
 		tangentdir[2] = ((uv_distCA[1] * p_distBA[2]) - (uv_distBA[1] * p_distCA[2])) * area
 		
 		# for quads:
-		area2 = 0.0
-		tangentdir2 = Vector((0.0,0.0,0.0))
-		if len(polyverts) > 3:
+		if len(polyverts) > 3 and len(uvpoly) > 3:
+			uv4 = Vector(uvpoly[3])
+			v4 = Vector(polyverts[3])
+			
+			uv_distDA = uv4 - uv1
+			uv_distAC = uv1 - uv3
+			
+			p_distAC = v1 - v3
+			p_distDA = v4 - v1
+			
 			area2 = (uv_distAC[0] * uv_distDA[1]) - (uv_distDA[1] * uv_distAC[0])
 			
+			tangentdir2 = Vector((0.0,0.0,0.0))
 			tangentdir2[0] = ((uv_distDA[0] * p_distAC[0]) - (uv_distAC[0] * p_distDA[0])) * area2
 			tangentdir2[1] = ((uv_distDA[0] * p_distAC[1]) - (uv_distAC[0] * p_distDA[1])) * area2
 			tangentdir2[2] = ((uv_distDA[0] * p_distAC[2]) - (uv_distAC[0] * p_distDA[2])) * area2
@@ -1424,78 +1413,6 @@ def save_single(operator, scene, filepath="",
 			tangentdir = (tangentdir + tangentdir2) * 0.5
 		
 		return tangentdir
-	
-	def write_normals(normalsList):
-		fw('''
-		LayerElementNormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Normals: ''')
-
-		i = -1
-		for v in normalsList:
-			if i == -1:
-				fw('%.6f,%.6f,%.6f' % v[:])
-				i = 0
-			else:
-				if i == 2:
-					fw('\n\t\t\t ')
-					i = 0
-				fw(',%.6f,%.6f,%.6f'% v[:])
-			i += 1
-		fw('\n\t\t}')
-		
-		return {'Finished'}
-	
-	def write_binormals(binormalsList):
-		fw('''
-		LayerElementBinormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Binormals: ''')
-
-		i = -1
-		for v in binormalsList:
-			if i == -1:
-				fw('%.6f,%.6f,%.6f' % v[:])
-				i = 0
-			else:
-				if i == 2:
-					fw('\n\t\t\t ')
-					i = 0
-				fw(',%.6f,%.6f,%.6f'% v[:])
-			i += 1
-		fw('\n\t\t}')
-		
-		return {'Finished'}
-	
-	def write_tangents(tangentsList):
-		fw('''
-		LayerElementTangent: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByPolygonVertex"
-			ReferenceInformationType: "Direct"
-			Tangents: ''')
-
-		i = -1
-		for v in tangentsList:
-			if i == -1:
-				fw('%.6f,%.6f,%.6f' % v[:])
-				i = 0
-			else:
-				if i == 2:
-					fw('\n\t\t\t ')
-					i = 0
-				fw(',%.6f,%.6f,%.6f'% v[:])
-			i += 1
-		fw('\n\t\t}')
-		
-		return {'Finished'}
 	
 	
 	def write_mesh(my_mesh):
@@ -1534,7 +1451,7 @@ def save_single(operator, scene, filepath="",
 		# no need for tangents on a collision mesh
 		if not is_collision:
 			if export_tangentspace_base != 'NONE':
-				if ("UCX_" in meshobject.name) or (len(me.tessface_uv_textures) > 0):
+				if len(me.tessface_uv_textures) > 0:
 					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
 					export_tangents = True
 		
@@ -1547,21 +1464,40 @@ def save_single(operator, scene, filepath="",
 		# custom - Included Addon
 		
 		if not usedefaultnormals:
-			if 'custom_meshdata' in meshobject and (normals_export_mode == 'C_ISATHAR' or normals_export_mode == 'AUTO'):
-					for i in range(len(meshobject.custom_meshdata)):
+			if ('polyn_meshdata' in meshobject or 'vertexn_meshdata' in meshobject) and (normals_export_mode == 'C_ISATHAR' or normals_export_mode == 'AUTO'):
+					# convert per vertex to per poly if needed
+					if not bpy.context.window_manager.edit_splitnormals:
+						meshobject.polyn_meshdata.clear()
+						
+						for f in me_faces:
+							tempfacedata = meshobject.polyn_meshdata.add()
+							tempfacedata.fcenter = f.center
+							
+							if 'vdata' not in tempfacedata:
+								tempfacedata['vdata'] = []
+							
+							tempverts = [v for v in f.vertices]
+							for j in tempverts:
+								tempvertdata = tempfacedata.vdata.add()
+								tempvertdata.vpos = meshobject.vertexn_meshdata[j].vpos
+								tempvertdata.vnormal = meshobject.vertexn_meshdata[j].vnormal
+						
+						meshobject.vertexn_meshdata.clear()
+					
+					for i in range(len(meshobject.polyn_meshdata)):
 						tempvcount = 0
-						for vd in meshobject.custom_meshdata[i].vdata:
+						for vd in meshobject.polyn_meshdata[i].vdata:
 							if tempvcount < len(me_faces[i].vertices):
 								me_normals.append(Vector(vd.vnormal))
 							tempvcount += 1
 					
 					if export_tangents and export_tangentspace_base == 'LENGY':
-						for i in range(len(meshobject.custom_meshdata)):
+						for i in range(len(meshobject.polyn_meshdata)):
 							faceverts = []
 							uvface = []
 							vcount = 0
 							
-							for vd in meshobject.custom_meshdata[i].vdata:
+							for vd in meshobject.polyn_meshdata[i].vdata:
 								faceverts.append(Vector(vd.vpos))
 									
 								if vcount == 0:
@@ -1584,7 +1520,7 @@ def save_single(operator, scene, filepath="",
 							for k in range(vcount):
 								uvverts_list.append(calc_uvtanbase(uvface, faceverts))
 
-								################################################################
+				################################################################
 				# custom - Recalc Vertex Normals script
 			
 			elif 'vertex_normal_list' in meshobject and (normals_export_mode == 'C_ASDN' or normals_export_mode == 'AUTO'):
@@ -1627,7 +1563,7 @@ def save_single(operator, scene, filepath="",
 				usedefaultnormals = True
 		
 		#######################################################################
-		# default / fallback / collision
+		# default / fallback
 		
 		if usedefaultnormals:
 			for i in range(len(me_faces)):
@@ -1684,7 +1620,7 @@ def save_single(operator, scene, filepath="",
 					uvverts_list = []
 					# tangent smoothing
 					# slow - iterates through each vertex + creates lists for the smoothing pass
-					# smoothing is based on faces + uv islands that share the vertices
+					# smoothing is based on faces + uv islands that share the same vertices
 					for i in range(len(me_vertices)):
 						oneseamlist = []
 						twoseamslist = []
@@ -1888,11 +1824,70 @@ def save_single(operator, scene, filepath="",
 		########################################
 		#		Normals, Tangents, Binormals:
 		
-		write_normals(me_normals)
-		if export_tangents:
-			write_binormals(me_binormals)
-			write_tangents(me_tangents)
+		fw('''
+		LayerElementNormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Normals: ''')
+
+		i = -1
+		for v in me_normals:
+			if i == -1:
+				fw('%.6f,%.6f,%.6f' % v[:])
+				i = 0
+			else:
+				if i == 2:
+					fw('\n\t\t\t ')
+					i = 0
+				fw(',%.6f,%.6f,%.6f'% v[:])
+			i += 1
+		fw('\n\t\t}')
 		
+		if export_tangents:
+		
+			fw('''
+		LayerElementBinormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Binormals: ''')
+			
+			i = -1
+			for v in me_binormals:
+				if i == -1:
+					fw('%.6f,%.6f,%.6f' % v[:])
+					i = 0
+				else:
+					if i == 2:
+						fw('\n\t\t\t ')
+						i = 0
+					fw(',%.6f,%.6f,%.6f'% v[:])
+				i += 1
+			fw('\n\t\t}')
+			
+			fw('''
+		LayerElementTangent: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Tangents: ''')
+			
+			i = -1
+			for v in me_tangents:
+				if i == -1:
+					fw('%.6f,%.6f,%.6f' % v[:])
+					i = 0
+				else:
+					if i == 2:
+						fw('\n\t\t\t ')
+						i = 0
+					fw(',%.6f,%.6f,%.6f'% v[:])
+				i += 1
+			fw('\n\t\t}')
 		
 		###########################################
 		# Write Smoothing Groups
@@ -2862,6 +2857,8 @@ Relations:  {''')
 
 	# Armature must be a Limb for XNA
 	# Note, 2.58 and previous wrote these as normal empties and it worked mostly (except for XNA)
+	
+	# - removed Armature for root bone fix
 	#for my_arm in ob_arms:
 	#	fw('\n\tModel: "Model::%s", "Limb" {\n\t}' % my_arm.fbxName)
 
@@ -2938,6 +2935,7 @@ Connections:  {''')
 	for ob_generic in ob_all_typegroups:  # all blender 'Object's we support
 		for my_ob in ob_generic:
 			# for deformed meshes, don't have any parents or they can get twice transformed.
+			# - removed Armature dependency from export and object from file write for root bone fix
 			if my_ob.fbxParent and (not my_ob.fbxArm):
 				fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_ob.fbxName, my_ob.fbxParent.fbxName))
 			else:

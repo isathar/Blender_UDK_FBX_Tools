@@ -5,14 +5,10 @@
 
 import bpy
 import bmesh
-
 import math
 from mathutils import Vector
-
 from bpy_extras.io_utils import (ImportHelper,path_reference_mode)
-
 from bpy.props import (StringProperty,BoolProperty)
-
 import os.path
 
 
@@ -57,9 +53,8 @@ def convert_listtovectors(oldlist):
 	return newList
 
 
-# copy imported normals to the selected mesh (must be the same mesh)
+# copy imported normals to the selected mesh
 def copy_importednormals(objname, normals_list):
-	
 	# get ref to current object
 	tempobject = "none"
 	returnstr = "no mesh found"
@@ -72,7 +67,7 @@ def copy_importednormals(objname, normals_list):
 	
 	if tempobject != "none":
 		# make sure mesh data exists
-		if 'custom_meshdata' in tempobject:
+		if 'polyn_meshdata' in tempobject:
 			# go to edit mode, get mesh data
 			lastMode = bpy.context.mode
 			if lastMode != "EDIT_MESH":
@@ -91,7 +86,7 @@ def copy_importednormals(objname, normals_list):
 				verts_count += c
 			
 			# make sure selected mesh has the same # of faces/verts
-			if faces_count == len(tempobject.custom_meshdata):
+			if faces_count == len(tempobject.polyn_meshdata):
 				if verts_count == len(normals_list):
 					# build the new mesh data
 					vcount = 0
@@ -99,13 +94,14 @@ def copy_importednormals(objname, normals_list):
 						faceverts = [v for v in faces_list[i].verts]
 						for j in range(verts_perface[i]):
 							if vcount < len(normals_list):
-								tempobject.custom_meshdata[i].vdata[j].vnormal = normals_list[vcount]
+								tempobject.polyn_meshdata[i].vdata[j].vnormal = normals_list[vcount]
 								vcount += 1
+					
 					returnstr =  ("imported " + str(vcount) + " normals")
 				else:
 					returnstr = ("Error: Mesh vertices different from file: " + str(len(normals_list)) + " in file / " + str(verts_count) + " in mesh")
 			else:
-				returnstr = ("Error: Mesh faces different from file: " + str(len(tempobject.custom_meshdata)) + " in file / " + str(faces_count) + " in mesh")
+				returnstr = ("Error: Mesh faces different from file: " + str(len(tempobject.polyn_meshdata)) + " in file / " + str(faces_count) + " in mesh")
 			
 			bpy.ops.object.mode_set(mode='OBJECT')
 		else:
@@ -197,6 +193,7 @@ def import_readfbxfile(importfilepath, selectedonly):
 							objcount_imported += 1
 						print (objname + ": " + importstr)
 			
+			# debug stuff:
 			print ("- Import Stats -")
 			print ("# Selected: " + str(objcount_needed))
 			print ("# Imported: " + str(objcount_imported))
@@ -219,4 +216,3 @@ class import_customnormals(bpy.types.Operator, ImportHelper):
 		import_readfbxfile(self.filepath, self.import_selected)
 		
 		return {'FINISHED'}
-
