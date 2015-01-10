@@ -110,11 +110,6 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 				   ),
 			default='NONE',
 			)
-	export_rootbonename = StringProperty(
-			name="Root Bone",
-			description="The name of your skeleton's root bone",
-			default='b_root',
-			)
 	use_armature_deform_only = BoolProperty(
 			name="Only Deform Bones",
 			description="Only write deforming bones",
@@ -195,7 +190,7 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 		
 		global_matrix = (global_matrix * axis_conversion(to_forward=self.axis_forward,to_up=self.axis_up,).to_4x4())
 		
-		keywords = self.as_keywords(ignore=("global_scale","check_existing","filter_glob","axis_forward","axis_up"))
+		keywords = self.as_keywords(ignore=("check_existing","filter_glob","axis_forward","axis_up"))
 		keywords["global_matrix"] = global_matrix
 		
 		from . import export_fbx

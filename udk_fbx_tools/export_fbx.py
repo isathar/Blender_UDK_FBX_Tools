@@ -234,11 +234,11 @@ def save_single(operator, scene, filepath="",
 		global_matrix=None,
 		context_objects=None,
 		object_types={'ARMATURE', 'MESH'},
+		global_scale=1.0,
 		use_mesh_modifiers=False,
 		mesh_smooth_type='FACE',
 		normals_export_mode='AUTO',
 		export_tangentspace_base='NONE',
-		export_rootbonename='b_root',
 		use_armature_deform_only=False,
 		use_anim=False,
 		use_anim_optimize=False,
@@ -247,21 +247,21 @@ def save_single(operator, scene, filepath="",
 		use_mesh_edges=False,
 		use_default_take=False,
 	):
-
+	
 	import bpy_extras.io_utils
-
+	
 	# Only used for camera and lamp rotations
 	mtx_x90 = Matrix.Rotation(math.pi / 2.0, 3, 'X')
 	# Used for mesh and armature rotations
 	mtx4_z90 = Matrix.Rotation(math.pi / 2.0, 4, 'Z')
 	# Rotation does not work for XNA animations.  I do not know why but they end up a mess! (JCB)
-
+	
 	if global_matrix is None:
 		global_matrix = Matrix()
-		global_scale = 1.0
-	else:
-		global_scale = global_matrix.median_scale
-
+		#global_scale = 1.0
+	#else:
+	#	global_scale = global_matrix.median_scale
+	
 	# Use this for working out paths relative to the export location
 	base_src = os.path.dirname(bpy.data.filepath)
 	base_dst = os.path.dirname(filepath)
@@ -484,7 +484,7 @@ def save_single(operator, scene, filepath="",
 		"""
 		if isinstance(ob, bpy.types.Bone):
 			# UE - specific rotation fix - will probably mess up custom axis settings, still testing
-			if ob.name == export_rootbonename:
+			if not ob.parent:
 				matrix = ob.matrix_local * mtx4_z90 * Matrix.Rotation(math.pi / 2.0, 4, 'Y')
 			else:
 				matrix = ob.matrix_local * mtx4_z90 
@@ -544,9 +544,11 @@ def save_single(operator, scene, filepath="",
 		"""
 		loc, rot, scale, matrix, matrix_rot = object_tx(ob, loc, matrix, matrix_mod)
 		
+		tempScale = (scale[0] * global_scale, scale[1] * global_scale, scale[2] * global_scale)
+		
 		fw('\n\t\t\tProperty: "Lcl Translation", "Lcl Translation", "A+",%.15f,%.15f,%.15f' % loc)
 		fw('\n\t\t\tProperty: "Lcl Rotation", "Lcl Rotation", "A+",%.15f,%.15f,%.15f' % tuple_rad_to_deg(rot))
-		fw('\n\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%.15f,%.15f,%.15f' % scale)
+		fw('\n\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%.15f,%.15f,%.15f' % tempScale)
 		return loc, rot, scale, matrix, matrix_rot
 
 	def get_constraints(ob=None):
@@ -1482,7 +1484,7 @@ def save_single(operator, scene, filepath="",
 								tempvertdata.vpos = meshobject.vertexn_meshdata[j].vpos
 								tempvertdata.vnormal = meshobject.vertexn_meshdata[j].vnormal
 						
-						meshobject.vertexn_meshdata.clear()
+						#meshobject.vertexn_meshdata.clear()
 					
 					for i in range(len(meshobject.polyn_meshdata)):
 						tempvcount = 0
@@ -1606,7 +1608,7 @@ def save_single(operator, scene, filepath="",
 		if export_tangents:
 			if export_tangentspace_base == 'LENGY':
 				if len(uvverts_list) != len(me_normals):
-					print("UV length mismatch: Tangents calculation disabled.")
+					print("UV length mismatch: Tangents will not be calculated.")
 				else :
 					for i in range(len(me_normals)):
 						tan = uvverts_list[i]

@@ -211,6 +211,16 @@ Changelog:
 
 _(not counting the ridiculous amount of edits after each update)_
 
+
+*0.10.1*
+
+- *exporter*:
+- fixed scaling for static mesh exports, not working properly for armatures at the moment
+- the exporter now detects the root bone of any parented armature, removing the need to manually enter root bone name
+- fixed an export error that occured when exporting a mesh twice (the normals list was getting cleared if in vertex mode)
+- *editor*:
+- fixed Default auto-generation method
+
 *0.10.0*
 
 - replaced broken init file (Blender should recognize the addon again)
