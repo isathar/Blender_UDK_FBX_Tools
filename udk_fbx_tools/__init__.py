@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "UE FBX Normals Tools",
 	"author": "Andreas Wiehn (isathar)",
-	"version": (0, 10, 0),
+	"version": (0, 10, 1),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
 	"description": "Adds an editor for vertex normals and an exporter "
