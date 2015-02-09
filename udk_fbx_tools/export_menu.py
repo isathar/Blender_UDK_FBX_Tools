@@ -22,7 +22,7 @@ if "bpy" in locals():
 		imp.reload(export_fbx)
 
 import bpy
-from bpy.props import (StringProperty,BoolProperty,FloatProperty,EnumProperty,)
+from bpy.props import (StringProperty,BoolProperty,IntProperty,FloatProperty,EnumProperty,)
 from bpy_extras.io_utils import (ExportHelper,path_reference_mode,axis_conversion,)
 
 
@@ -96,19 +96,26 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			)
 	normals_export_mode = EnumProperty(
 			name="Normals",
-			items=(('BLEND', "Default", "Let Blender generate normals"),
-				   ('C_ASDN', "asdn's Recalc Vertex Normals", "write normals from Recalc Vertex Normals script"),
-				   ('C_ISATHAR', "FBX Tools", "write normals from the included Vertex Normals Addon"),
+			items=(('BLEND', "Default", "Use Blender's default split normals method"),
+				   ('RECALCVN', "adsn's Recalc Vertex Normals", "write normals from Recalc Vertex Normals script"),
+				   ('NORMEDIT', "FBX Tools", "write normals from the included Vertex Normals Addon"),
 				   ('AUTO', "Automatic", "exports normals from automatically detected editor variables (or default)"),
 				   ),
 			default='AUTO',
 			)
 	export_tangentspace_base = EnumProperty(
 			name="Tangents",
-			items=(('LENGY', "Lengyel", "Custom implementation of Lengyel's method"),
+			items=(('DEFAULT', "Default", "Blender default (Mikk TSpace)"),
+				   ('LENGYEL', "Lengyel", "Custom implementation of Lengyel's method"),
 				   ('NONE', " None ", "No tangents will be exported"),
 				   ),
 			default='NONE',
+			)
+	tangentspace_uvlnum = IntProperty(
+			name="UV Layer",
+			description=("Index of the UV layer to use for tangents"),
+			min=0, max=16,
+			default=0,
 			)
 	use_armature_deform_only = BoolProperty(
 			name="Only Deform Bones",
@@ -195,3 +202,4 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 		
 		from . import export_fbx
 		return export_fbx.save(self, context, **keywords)
+

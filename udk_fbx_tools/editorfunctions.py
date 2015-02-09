@@ -6,7 +6,6 @@ import bgl
 import math
 from mathutils import Vector
 
-
 # Math:
 def in_distance(p1, p2, checkdist):
 	tempdist = math.sqrt((p1[0] - p2[0]) ** 2) + (((p1[1] - p2[1]) ** 2) + (p1[2] - p2[2]) ** 2)
@@ -16,7 +15,7 @@ def in_distance(p1, p2, checkdist):
 # Editor:
 
 # generate new normals based on preset
-def generate_newnormals(context):
+def generate_newnormals(self, context):
 	genmode = context.window_manager.vn_generatemode
 	me = context.active_object.data
 	bm = bmesh.from_edit_mesh(me)
@@ -31,14 +30,13 @@ def generate_newnormals(context):
 	
 	# DEFAULT: Blender default
 	if (genmode == 'DEFAULT'):
-		me.calc_normals()
+		bpy.ops.mesh.normals_make_consistent()
 		me.update()
 		
 		if context.window_manager.edit_splitnormals:
 			for i in range(len(faces_list)):
 				faceverts = [v for v in faces_list[i].verts]
 				tempfacedata = context.active_object.polyn_meshdata[i]
-				tempfacedata.fcenter = faces_list[i].calc_center_median()
 				
 				for j in range(len(faceverts)):
 					tempfacedata.vdata[j].vnormal = faceverts[j].normal
@@ -70,8 +68,8 @@ def generate_newnormals(context):
 				for i in range(len(verts_list)):
 					context.active_object.vertexn_meshdata[i].vnormal = context.window_manager.vn_directionalvector
 	
-	# POINT: Bent from point (3D cursor)
-	elif (genmode == 'POINT'):
+	# BENT: Bent from point (3D cursor)
+	elif (genmode == 'BENT'):
 		cursorloc = context.scene.cursor_location
 		if context.window_manager.edit_splitnormals:
 			if context.window_manager.vn_genselectiononly:
@@ -182,6 +180,7 @@ def generate_newnormals(context):
 						tempfvect = tempfvect + v.link_faces[j].normal
 					context.active_object.vertexn_meshdata[i].vnormal = (tempfvect / float(fncount)).normalized()
 	
+	
 	if (not context.window_manager.edit_splitnormals) and context.window_manager.vn_settomeshongen:
 		set_meshnormals(context)
 
@@ -189,40 +188,39 @@ def generate_newnormals(context):
 # create new normals list
 def reset_normals(context):
 	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	me.calc_normals()
-	me.update()
 	
 	context.window_manager.temp_copypastelist.clear()
 	if context.window_manager.edit_splitnormals:
 		context.active_object.polyn_meshdata.clear()
 		
-		faces_list = [f for f in bm.faces]
+		faces_list = [f for f in me.polygons]
+		verts_list = [[v.co, v.normal] for v in me.vertices]
+		
 		for f in faces_list:
 			tempfacedata = context.active_object.polyn_meshdata.add()
-			tempfacedata.fcenter = f.calc_center_median()
 			
 			if 'vdata' not in tempfacedata:
 				tempfacedata['vdata'] = []
 			
-			tempverts = [v for v in f.verts]
+			tempverts = [v for v in f.vertices]
 			for j in tempverts:
 				tempvertdata = tempfacedata.vdata.add()
-				tempvertdata.vpos = j.co
-				tempvertdata.vnormal = j.normal
+				tempvertdata.vpos = verts_list[j][0]
+				tempvertdata.vnormal = verts_list[j][1]
 		
 		if context.window_manager.convert_splitnormals and 'vertexn_meshdata' in context.active_object:
 			convert_pvertextoppoly(context)
 		
 		context.active_object.vertexn_meshdata.clear()
 	else:
+		verts_list = [[v.co, v.normal] for v in me.vertices]
+		
 		context.active_object.vertexn_meshdata.clear()
-		verts_list = [v for v in bm.verts]
+		
 		for v in verts_list:
 			tempvdata = context.active_object.vertexn_meshdata.add()
-			tempvdata.vpos = v.co
-			tempvdata.vnormal = v.normal
+			tempvdata.vpos = v[0]
+			tempvdata.vnormal = v[1]
 		
 		if context.window_manager.convert_splitnormals and 'polyn_meshdata' in context.active_object:
 			convert_ppolytopvertex(context)
@@ -423,67 +421,9 @@ def set_meshnormals(context):
 		me = context.active_object.data
 		bm = bmesh.from_edit_mesh(me)
 		me.update()
-		verts_list = [v for v in bm.verts]
-		
-		for i in range(len(context.active_object.vertexn_meshdata)):
-			verts_list[i].normal = context.active_object.vertexn_meshdata[i].vnormal
-		
-		context.area.tag_redraw()
+		#verts_list = [v for v in bm.verts]
+		bm.verts.ensure_lookup_table()
+		for i in range(len(bm.verts)):
+			bm.verts[i].normal = context.active_object.vertexn_meshdata[i].vnormal
 
 
-# creates an object-space normal map in a vertex color layer
-def set_vertcolnormal(context):
-	me = context.active_object.data
-	me.update()
-	
-	waseditmode = context.mode == "EDIT_MESH"
-	
-	bpy.ops.object.mode_set(mode='OBJECT')
-	
-	tempindex = me.vertex_colors.find('normalscol')
-	if tempindex < 0:
-		bpy.ops.mesh.vertex_color_add()
-		templayer = me.vertex_colors[len(me.vertex_colors) - 1]
-		templayer.name = 'normalscol'
-	
-	nclayer = me.vertex_colors['normalscol']
-	
-	faces_list = [f for f in me.polygons]
-	vertices_list = [v for v in me.vertices]
-	
-	vcount = 0
-	for i in range(len(faces_list)):
-		verts_list = [v for v in faces_list[i].vertices]
-		for j in range(len(verts_list)):
-			#tempnorm = Vector(vertices_list[verts_list[j]].normal).normalized()
-			tempnorm = vertices_list[verts_list[j]].normal
-			tempcol = [0.0,0.0,0.0]
-			tempcol[0] = (tempnorm[0] + 1.0) * 0.5
-			tempcol[1] = ((-1.0 * tempnorm[1]) + 1.0) * 0.5
-			tempcol[2] = ((-1.0 * tempnorm[2]) + 1.0) * 0.5
-			#tempcol = tempcol.normalized()
-			
-			nclayer.data[vcount].color[0] = tempcol[0]
-			nclayer.data[vcount].color[1] = tempcol[1]
-			nclayer.data[vcount].color[2] = tempcol[2]
-			vcount += 1
-	
-	if waseditmode:
-		bpy.ops.object.mode_set(mode='EDIT')
-
-
-def tangent_test(context):
-	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	
-	loops_list = [f.loops for f in bm.faces]
-	
-	for i in range(len(loops_list)):
-		for j in range(len(loops_list[i])):
-			#tempvect = loops_list[i][j].calc_tangent()
-			tan = loops_list[i][j].calc_tangent()
-			#norm = loops_list[i][j].calc_normal()
-			norm = Vector(context.active_object.vertexn_meshdata[loops_list[i][j].vert.index].vnormal)
-			tempvect = (tan - (norm * norm.dot(tan))).normalized()
-			print (tempvect)

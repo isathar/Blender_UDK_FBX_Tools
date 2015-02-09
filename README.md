@@ -6,7 +6,14 @@ The exporter can also calculate tangents and binormals on export, allowing you t
 
 
 
-*Compatible with Blender v2.70 - 2.72 (not tested on 2.73, will probably need an update)*
+*Compatible with Blender v2.70+*
+
+
+A lot of this readme is obselete for version 1.0.0
+
+
+- Optional: You'll need Vrav's Transfer Vertex Normals addon for the new Transfer Normals option. It's available at:
+http://blenderartists.org/forum/showthread.php?259554-Addon-EditNormals-Transfer-Vertex-Normals&s=33911f74a3f9a2250b1645e4cda304a8
 
 --------------------------------------------------------------------------------
 
@@ -14,7 +21,7 @@ The exporter can also calculate tangents and binormals on export, allowing you t
 
 - Copy the 'udk_fbx_tools' folder to your addons directory. 
 - Find it in the Addon Manager in the 'Mesh' category as 'UE FBX Normals Tools' and enable it. 
-- There should now be a new tab titled 'FBX Tools' in your tools panel. 
+- There should be a new tab named 'Normals Editor' under 'Shading / UVs' in your tools panel. 
 
 
 -------------------------------------------------------------------------------
@@ -24,19 +31,15 @@ The exporter can also calculate tangents and binormals on export, allowing you t
 - Normals can be applied to the mesh in Vertex Mode, but not in Poly Mode. Both modes support displaying normals as 3D lines.
   - The mesh's displayed normals will reset every time you enter Blender's Edit Mode, and can be reset by clicking _Apply to Mesh_ again.
 
-- For meshes to export correctly, you need to apply any changes you made to the mesh's rotation, location or scale before exporting.
-
 *Export Time* 
-Exporting Tangents can be pretty slow. I've sped the script up a little since the initial release, but it can stil take some time on complex meshes.
-Blender may hitch or freeze while exporting, but shouldn't crash :)
-I'm looking into more performance tweaks for this, but I wouldn't expect any miracles... The current implementation loops through a potentially massive list in Python.
+Exporting Tangents can be pretty slow. I've sped the script up a lot since the initial release, but it can stil take some time on complex meshes.
+Blender may hitch or freeze while exporting, but shouldn't crash.
 
 
 *Editing Performance* 
-I've tested this on meshes with between 6 and 35000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 760),
-real-time display of normals and my custom angle-based generation algorithm are very slow on anything past 8000 or so polys, depending on the mesh's
-density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts. I have a 
-pretty good idea of why it's doing this and will try to optimize things some more soon.
+I've tested this on meshes with between 6 and 60000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 760),
+real-time display of normals and my custom angle-based generation algorithm are slow on anything past 8000 or so polys, depending on the mesh's
+density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts.
 
 
 *Tangents and Unreal Engine 4:*
@@ -218,9 +221,38 @@ Altered export settings:
 
 
 =========================================================================================================
+Reference for tangent space calculation:
+
+Lengyel, Eric. “Computing Tangent Space Basis Vectors for an Arbitrary Mesh”. Terathon Software 3D Graphics Library, 2001. http://www.terathon.com/code/tangent.html
+
+
+
+=========================================================================================================
 Changelog: 
 
 _(not counting the ridiculous amount of edits after each update)_
+
+
+*1.0.0*
+
+- removed redundant class for vertexn_meshdata list, switched to vert_data type
+- moved import/export buttons to proper menus
+- reorganized interface to decrease clutter
+- fixed long-running typo of adsn's name :D
+
+- *exporter*:
+- updated export scaling to a more standard method (not using local scaling)
+- minor changes to previous armature axis settings fix (cleaner)
+- updated default export method to read normals from loops like the newer default exporter
+- added the ability to export blender's default tangents/binormals
+- refactored + optimized custom tangent calculation method
+  - performance improvements for exporting custom tangents (should be much faster now)
+- added the ability to pick the UV layer tangents are based on (1 layer max)
+- added warning messages + fallbacks to prevent the exporter from stopping when it encounters a problem
+
+- *editor*:
+- added ability to use Vrav's Transfer Vertex Normals addon from editor
+  - this replaces copy/paste functionality
 
 
 *0.10.1*
@@ -232,6 +264,7 @@ _(not counting the ridiculous amount of edits after each update)_
 - *editor*:
 - fixed Default auto-generation method
 
+
 *0.10.0*
 
 - replaced broken init file (Blender should recognize the addon again)
@@ -242,6 +275,7 @@ _(not counting the ridiculous amount of edits after each update)_
 - rewrote copy/paste functionality
 - various fixes to armature export
 
+
 *0.9.0*
 
 - added importer for normals only
@@ -249,6 +283,7 @@ _(not counting the ridiculous amount of edits after each update)_
 - more exporter performance improvements
 - changed the way normals etc are exported
 - removed vertex sorting stuff from normals export since it should all be handled by the editor now
+
 
 *0.8.0*
 
@@ -259,6 +294,7 @@ _(not counting the ridiculous amount of edits after each update)_
 - changed the way axis settings are handled during export and set up separate axis options
 - exporter speed improvements
 
+
 *0.7.5*
 
 - *editor:*
@@ -266,6 +302,7 @@ _(not counting the ridiculous amount of edits after each update)_
 - fixed wrong vertex being selected while using manual edit (bad math)
 - *exporter:*
 - added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior)
+
 
 *0.7.0*
 
