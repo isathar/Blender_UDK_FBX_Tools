@@ -12,8 +12,22 @@ The exporter can also calculate tangents and binormals on export, allowing you t
 A lot of this readme is obselete for version 1.0.0
 
 
+_*1.0.0 Notes:*_
+
 - Optional: You'll need Vrav's Transfer Vertex Normals addon for the new Transfer Normals option. It's available at:
 http://blenderartists.org/forum/showthread.php?259554-Addon-EditNormals-Transfer-Vertex-Normals&s=33911f74a3f9a2250b1645e4cda304a8
+
+
+- The normals editor ui has been redesigned, and the readme has not yet been updated :D
+
+- To export files with the 7.3 exporter, select 'Use FBX 2013' from the export menu.
+
+- The new FBX 7.3 exporter should be able to export everything except animations at the moment.
+
+- The importer currently works with FBX 6.1 files only.
+
+- 'Merge Vertex Colors' does nothing at the moment.
+
 
 --------------------------------------------------------------------------------
 
@@ -38,7 +52,7 @@ Blender may hitch or freeze while exporting, but shouldn't crash.
 
 *Editing Performance* 
 I've tested this on meshes with between 6 and 60000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 760),
-real-time display of normals and my custom angle-based generation algorithm are slow on anything past 8000 or so polys, depending on the mesh's
+real-time display of normals and my custom angle-based generation algorithm are slow on anything past 25000 or so polys, depending on the mesh's
 density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts.
 
 

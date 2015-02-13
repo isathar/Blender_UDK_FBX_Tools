@@ -24,10 +24,6 @@ def generate_newnormals(self, context):
 	faces_list = [f for f in bm.faces]
 	verts_list = [v for v in bm.verts]
 	
-	# reset normals list to mesh's current normals
-	if context.window_manager.vn_resetongenerate:
-		reset_normals(context)
-	
 	# DEFAULT: Blender default
 	if (genmode == 'DEFAULT'):
 		bpy.ops.mesh.normals_make_consistent()
@@ -198,7 +194,6 @@ def reset_normals(context):
 		
 		for f in faces_list:
 			tempfacedata = context.active_object.polyn_meshdata.add()
-			
 			if 'vdata' not in tempfacedata:
 				tempfacedata['vdata'] = []
 			
@@ -313,61 +308,6 @@ def vn_get(context):
 				break
 
 
-######################
-# 	Copy/Paste
-
-def copy_tempnormalslist(context):
-	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	context.window_manager.temp_copypastelist.clear()
-	
-	if context.window_manager.edit_splitnormals:
-		faceslist = [f for f in bm.faces]
-		findices = []
-		
-		for i in range(len(faceslist)):
-			vertlist = [v for v in faceslist[i].verts]
-			for j in range(len(vertlist)):
-				if vertlist[j].index not in findices:
-					if vertlist[j].select:
-						tempdata = context.window_manager.temp_copypastelist.add()
-						tempdata.vpos = context.active_object.polyn_meshdata[i].vdata[j].vpos
-						tempdata.vnormal = context.active_object.polyn_meshdata[i].vdata[j].vnormal
-						findices.append(vertlist[j].index)
-	else:
-		verts_list = [v for v in bm.verts]
-		for i in range(len(verts_list)):
-			if verts_list[i].select:
-				tempdata = context.window_manager.temp_copypastelist.add()
-				tempdata.vpos = context.active_object.vertexn_meshdata[i].vpos
-				tempdata.vnormal = context.active_object.vertexn_meshdata[i].vnormal
-
-
-def paste_tempnormalslist(context):
-	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	
-	if context.window_manager.edit_splitnormals:
-		faceslist = [f for f in bm.faces]
-		for i in range(len(faceslist)):
-			vertlist = [v for v in faceslist[i].verts]
-			for j in range(len(vertlist)):
-				if vertlist[j].select:
-					for k in context.window_manager.temp_copypastelist:
-						if in_distance(k.vpos, context.active_object.polyn_meshdata[i].vdata[j].vpos, 0.0001):
-							context.active_object.polyn_meshdata[i].vdata[j].vnormal = k.vnormal
-	else:
-		verts_list = [v for v in bm.verts]
-		for i in range(len(verts_list)):
-			if verts_list[i].select:
-				temploc = verts_list[i].co
-				for j in range(len(context.window_manager.temp_copypastelist)):
-					if in_distance(temploc, context.window_manager.temp_copypastelist[j].vpos, 0.0001):
-						context.active_object.vertexn_meshdata[i].vnormal = context.window_manager.temp_copypastelist[j].vnormal
-
-
 ##############################
 # Display vertex normals:
 
@@ -381,49 +321,57 @@ def draw_line(vertexloc, vertexnorm, scale):
 	bgl.glVertex3f(x2,y2,z2)
 	bgl.glEnd()
 
-
 # Draw vertex normals handler
 def draw_vertex_normals(self, context):
 	if context.mode != "EDIT_MESH":
 		return
 	
+	dispcol = context.window_manager.vn_displaycolor
+	scale = context.window_manager.vn_disp_scale
+	
 	bgl.glEnable(bgl.GL_BLEND)
 	bgl.glLineWidth(1.5)
-	bgl.glColor3f(context.window_manager.vn_displaycolor[0],context.window_manager.vn_displaycolor[1],context.window_manager.vn_displaycolor[2])
-	scale = context.window_manager.vn_disp_scale
+	bgl.glColor3f(dispcol[0],dispcol[1],dispcol[2])
 	
 	if context.window_manager.edit_splitnormals:
 		if 'polyn_meshdata' in context.active_object:
 			if context.window_manager.vndisp_selectiononly:
 				me = context.active_object.data
 				bm = bmesh.from_edit_mesh(me)
+				
 				fcount = 0
 				for m in context.active_object.polyn_meshdata:
-					[draw_line(v.vpos, v.vnormal, scale) for v in m.vdata if bm.faces[fcount].select]
+					if bm.faces[fcount].select:
+						[draw_line(v.vpos, v.vnormal, scale) for v in m.vdata]
 					fcount += 1
 			else:
 				for m in context.active_object.polyn_meshdata:
 					[draw_line(v.vpos, v.vnormal, scale) for v in m.vdata]
 	else:
-		if 'vertexn_meshdata' in context.active_object:
-			if context.window_manager.vndisp_selectiononly:
-				me = context.active_object.data
-				bm = bmesh.from_edit_mesh(me)
-				[draw_line(context.active_object.vertexn_meshdata[v].vpos, context.active_object.vertexn_meshdata[v].vnormal, scale) for v in range(len(context.active_object.vertexn_meshdata)) if bm.verts[v].select]
-			else:
-				[draw_line(v.vpos, v.vnormal, scale) for v in context.active_object.vertexn_meshdata]
+		if context.window_manager.vndisp_selectiononly:
+			me = context.active_object.data
+			bm = bmesh.from_edit_mesh(me)
+			
+			vcount = 0
+			for v in context.active_object.vertexn_meshdata:
+				if bm.verts[vcount].select:
+					draw_line(v.vpos, v.vnormal, scale)
+				vcount += 1
+		else:
+			for v in context.active_object.vertexn_meshdata:
+				draw_line(v.vpos, v.vnormal, scale)
+	
 	bgl.glDisable(bgl.GL_BLEND)
 
 
-# show normals on mesh (vertex mode only)
+# apply normals to mesh (vertex mode only)
 def set_meshnormals(context):
-	if not context.window_manager.edit_splitnormals and 'vertexn_meshdata' in context.active_object:
-		me = context.active_object.data
-		bm = bmesh.from_edit_mesh(me)
-		me.update()
-		#verts_list = [v for v in bm.verts]
-		bm.verts.ensure_lookup_table()
-		for i in range(len(bm.verts)):
-			bm.verts[i].normal = context.active_object.vertexn_meshdata[i].vnormal
-
-
+	if not context.window_manager.edit_splitnormals:
+		if 'vertexn_meshdata' in context.active_object:
+			me = context.active_object.data
+			bm = bmesh.from_edit_mesh(me)
+			me.update()
+			
+			#bm.verts.ensure_lookup_table()
+			for i in range(len(bm.verts)):
+				bm.verts[i].normal = context.active_object.vertexn_meshdata[i].vnormal

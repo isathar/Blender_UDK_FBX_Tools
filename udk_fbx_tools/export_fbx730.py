@@ -76,6 +76,7 @@ sane_name_mapping_ob['Scene'] = 'Scene_'
 sane_name_mapping_ob_unique.add('Scene_')
 
 
+
 def increment_string(t):
 	name = t
 	num = ''
@@ -229,8 +230,9 @@ def meshNormalizedWeights(ob, me):
 	return groupNames, vWeightList
 
 header_comment = \
-'''; FBX 6.1.0 project file
+'''; FBX 7.3.0 project file
 ; Created by Blender FBX Exporter Customized
+;
 ; ----------------------------------------------------
 
 '''
@@ -280,6 +282,11 @@ def save_single(operator, scene, filepath="",
 
 	# collect images to copy
 	copy_set = set()
+	
+	last_geometryID = 4000000
+	last_MeshID = 500000
+	last_BoneID = 600000
+	last_MaterialID = 700000
 
 	# ----------------------------------------------
 	# storage classes
@@ -465,10 +472,9 @@ def save_single(operator, scene, filepath="",
 	curtime = time.localtime()[0:6]
 	
 	# moved creation time + creator into header
-	fw(
-'''FBXHeaderExtension:  {
+	fw('''FBXHeaderExtension:  {
 	FBXHeaderVersion: 1003
-	FBXVersion: 6100
+	FBXVersion: 7300
 	CreationTimeStamp:  {
 		Version: 1000
 		Year: %.4i
@@ -478,28 +484,80 @@ def save_single(operator, scene, filepath="",
 		Minute: %.2i
 		Second: %.2i
 		Millisecond: 0
-	}
-''' % (curtime))
-	fw(
-'''	Creator: "FBX Custom 6.1 - Blender %s"
-}''' % (bpy.app.version_string))
+	}''' % (curtime))
+
+	fw('\n\tCreator: "FBX Custom 7.3 - Blender %s"' % (bpy.app.version_string))
+	
+	# SceneInfo (moved to header in 7.3):
+	fw('''
+	SceneInfo: "SceneInfo::GlobalInfo", "UserData" {
+		Type: "UserData"
+		Version: 100
+		MetaData:  {
+			Version: 100
+			Title: ""
+			Subject: ""
+			Author: ""
+			Keywords: ""
+			Revision: ""
+			Comment: ""
+		}
+		Properties70:  {
+			''')
+	
+	fw('P: "DocumentUrl", "KString", "Url", "", "%s"\n' % filepath)
+	fw('\t\t\tP: "SrcDocumentUrl", "KString", "Url", "", "%s"' % filepath)
+	
+	fw('''
+			P: "Original", "Compound", "", ""
+			P: "Original|ApplicationVendor", "KString", "", "", ""
+			P: "Original|ApplicationName", "KString", "", "", "Blender"
+			P: "Original|ApplicationVersion", "KString", "", "", "2.73"
+			P: "Original|DateTime_GMT", "DateTime", "", "", ""
+			P: "Original|FileName", "KString", "", "", ""
+			P: "LastSaved", "Compound", "", ""
+			P: "LastSaved|ApplicationVendor", "KString", "", "", ""
+			P: "LastSaved|ApplicationName", "KString", "", "", "Blender"
+			P: "LastSaved|ApplicationVersion", "KString", "", "", "2.73"
+			P: "LastSaved|DateTime_GMT", "DateTime", "", "", ""
+		}
+	}''')
+	fw('\n}\n')
+	
+	# Write global settings
+	fw('''GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "FrontAxis", "int", "Integer", "",2
+		P: "FrontAxisSign", "int", "Integer", "",1
+		P: "CoordAxis", "int", "Integer", "",0
+		P: "CoordAxisSign", "int", "Integer", "",1
+		P: "OriginalUpAxis", "int", "Integer", "",-1
+		P: "OriginalUpAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",1
+		P: "OriginalUnitScaleFactor", "double", "Number", "",1
+		P: "AmbientColor", "ColorRGB", "Color", "",0,0,0
+		P: "DefaultCamera", "KString", "", "", "Producer Perspective"
+		P: "TimeMode", "enum", "", "",11
+		P: "TimeSpanStart", "KTime", "Time", "",0
+		P: "TimeSpanStop", "KTime", "Time", "",44261734750
+		P: "CustomFrameRate", "double", "Number", "",-1
+	}''')
+	fw('\n}\n\n')
 	
 	# Document description - not really part of header, but close to the start
-	fw(
-'''
-
-; Document Description
-;------------------------------------------------------------------
-
-Document:  {
-	Name: ""
-}
-
-; Document References
-;------------------------------------------------------------------
-
-References:  {
-}''')
+	fw('; Documents Description\n')
+	fw(';------------------------------------------------------------------\n\n')
+	fw('Documents:  {\n\tCount: 1\n')
+	fw('\tDocument: 100000, "", "Scene" {\n')
+	fw('\t\tProperties70:  {\n')
+	fw('\t\t\tP: "SourceObject", "object", "", ""\n')
+	fw('\t\t\tP: "ActiveAnimStackName", "KString", "", "", ""\n')
+	fw('\t\t}\n\t\tRootNode: 0\n\t}\n}\n\n')
+	
+	fw('; Document References\n;------------------------------------------------------------------\n\nReferences:\t{\n}')
 	
 	pose_items = []  # list of (fbxName, matrix) to write pose data for, easier to collect along the way
 
@@ -561,7 +619,97 @@ References:  {
 				rot = 0.0, 0.0, 0.0
 
 		return loc, rot, scale, matrix, matrix_rot
-
+	
+	
+	
+	# getters for id codes used to identify objects in fbx 7.3 format
+	# 100000 = Documents
+	
+	def get_fbx_GeomID(ob):
+		base = 200000
+		cnt = 1
+		for obj in bpy.context.scene.objects:
+			if (obj == ob):
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_MeshID(ob):
+		base = 300000
+		cnt = 1
+		for obj in bpy.context.scene.objects:
+			if (obj == ob):
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_MaterialID(mat, matlist):
+		base = 400000
+		cnt = 1
+		for matname, (mat2, tex) in matlist:
+			if mat2 == mat:
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_TextureID(intex, texlist):
+		base = 500000
+		cnt = 1
+		for texname, tex in textures:
+			if tex == intex:
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_VideoID(intex, texlist):
+		base = 600000
+		cnt = 1
+		for texname, tex in textures:
+			if tex == intex:
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_BoneAttributeID(inbone, boneslist):
+		base = 700000
+		cnt = 1
+		for checkbone in boneslist:
+			if checkbone == inbone:
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_BoneID(inbone, boneslist):
+		base = 310000
+		cnt = 1
+		for checkbone in boneslist:
+			if checkbone == inbone:
+				return (base + cnt)
+			cnt += 1
+		return base
+	
+	def get_fbx_DeformerID(bone, checkmesh, meshlist, boneslist):
+		base = 800000
+		cnt = 0
+		bcnt = 0
+		for my_mesh in meshlist:
+			if my_mesh.fbxArm:
+				cnt += 1
+				if my_mesh == bone:
+					return (base + cnt + bcnt)
+				
+				for my_bone in boneslist:
+					bcnt += 1
+					if my_mesh == checkmesh:
+						if my_bone == bone:
+							return (base + cnt + bcnt)
+				
+				
+				
+		return base
+	
+	
+	
 	def write_object_tx(ob, loc, matrix, matrix_mod=None):
 		"""
 		We have loc to set the location if non blender objects that have a location
@@ -716,47 +864,91 @@ References:  {
 			   )
 
 		return loc, rot, scale, matrix, matrix_rot
-
-	# -------------------------------------------- Armatures
-	#def write_bone(bone, name, matrix_mod):
-	def write_bone(my_bone):
-		fw('\n\tModel: "Model::%s", "Limb" {' % my_bone.fbxName)
-		fw('\n\t\tVersion: 232')
-
-		#~ poseMatrix = write_object_props(my_bone.blenBone, None, None, my_bone.fbxArm.parRelMatrix())[3]
-		poseMatrix = write_object_props(my_bone.blenBone, pose_bone=my_bone.getPoseBone())[3]  # dont apply bone matrices anymore
-
-		# Use the same calculation as in write_sub_deformer_skin to compute the global
-		# transform of the bone for the bind pose.
-		global_matrix_bone = (my_bone.fbxArm.matrixWorld * my_bone.restMatrix) * mtx4_z90
-		pose_items.append((my_bone.fbxName, global_matrix_bone))
-
-		# fw('\n\t\t\tProperty: "Size", "double", "",%.6f' % ((my_bone.blenData.head['ARMATURESPACE'] - my_bone.blenData.tail['ARMATURESPACE']) * my_bone.fbxArm.parRelMatrix()).length)
-		fw('\n\t\t\tProperty: "Size", "double", "",1')
-
-		#((my_bone.blenData.head['ARMATURESPACE'] * my_bone.fbxArm.matrixWorld) - (my_bone.blenData.tail['ARMATURESPACE'] * my_bone.fbxArm.parRelMatrix())).length)
-
-		"""
-		fw('\n\t\t\tProperty: "LimbLength", "double", "",%.6f' %\
-			((my_bone.blenBone.head['ARMATURESPACE'] - my_bone.blenBone.tail['ARMATURESPACE']) * my_bone.fbxArm.parRelMatrix()).length)
-		"""
-
-		fw('\n\t\t\tProperty: "LimbLength", "double", "",%.6f' %
-		   (my_bone.blenBone.head_local - my_bone.blenBone.tail_local).length)
-
-		#fw('\n\t\t\tProperty: "LimbLength", "double", "",1')
-		fw('\n\t\t\tProperty: "Color", "ColorRGB", "",0.8,0.8,0.8'
-		   '\n\t\t\tProperty: "Color", "Color", "A",0.8,0.8,0.8'
-		   '\n\t\t}'
-		   '\n\t\tMultiLayer: 0'
-		   '\n\t\tMultiTake: 1'
-		   '\n\t\tShading: Y'
-		   '\n\t\tCulling: "CullingOff"'
-		   '\n\t\tTypeFlags: "Skeleton"'
-		   '\n\t\tNodeAttributeName: "NodeAttribute::%s"'
-		   '\n\t}' % (my_bone.fbxName + '_ncl1_1')
-		   )
-
+	
+	################################
+	# Armatures
+	
+	# Bones:
+	# NodeAttributes: size, limblength for now
+	def write_bone_node(my_bone, bindex):
+		bindex = bindex + 700000
+		templlength = (my_bone.blenBone.head_local - my_bone.blenBone.tail_local).length
+		fw('\n\tNodeAttribute: %i, ' % bindex)
+		if my_bone.blenBone.parent:
+			fw('"NodeAttribute::%s", "LimbNode" {' % my_bone.fbxName)
+		else:
+			fw('"NodeAttribute::%s", "Root" {' % my_bone.fbxName)
+		fw('''
+		Properties70:  {
+			P: "Size", "double", "Number", "",1
+			P: "LimbLength", "double", "Number", "H",%f
+		}
+		TypeFlags: "Skeleton"
+	}''' % templlength)
+	
+	
+	# Limb: offset, scale, rotation
+	def write_bone_props(my_bone, bindex):
+		bindex = bindex + 310000
+		
+		if my_bone.parent:
+			global_matrix_bone = my_bone.restMatrix
+		else:
+			global_matrix_bone = (my_bone.restMatrix * my_bone.fbxArm.matrixWorld) * mtx4_z90
+		#pose_items.append((my_bone.fbxName, global_matrix_bone, my_bone.fbxName))
+		
+		#pose_items.append((my_bone.fbxName, my_bone.fbxArm.matrixWorld, my_bone.fbxName))
+		loc, rot, scale, matrix, matrix_rot = object_tx(my_bone.blenBone, None,global_matrix_bone)
+		#loc, rot, scale, matrix, matrix_rot = object_tx(my_bone.blenBone, None,my_bone.fbxArm.matrixWorld)
+		pose_items.append((my_bone.fbxName, matrix, my_bone.fbxName))
+		
+		lclrot = tuple_rad_to_deg(rot)
+		
+		fw('\n\tModel: %i, "Model::' % bindex)
+		if my_bone.blenBone.parent:
+			fw('%s", "LimbNode" {' % my_bone.fbxName)
+		else:
+			fw('%s", "Root" {' % my_bone.fbxName)
+		fw('''
+		Version: 232
+		Properties70:  {
+			P: "ScalingMin", "Vector3D", "Vector", "",1,1,1
+			P: "DefaultAttributeIndex", "int", "Integer", "",0''')
+		fw('\n\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",%.15f,%.15f,%.15f' % loc)
+		fw('\n\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A+",1,1,1')
+		fw('\n\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A+",%.15f,%.15f,%.15f' % lclrot)
+		fw('\n\t\t}\n\t\tShading: Y')
+		fw('\n\t\tCulling: "CullingOff"')
+		fw('\n\t}')
+		
+	
+	# added for 7.3 support
+	def write_modelattributes(my_mesh):
+		loc, rot, scale, matrix, matrix_rot = object_tx(my_mesh.blenObject, None, my_mesh.blenObject.matrix_world * global_matrix)
+		#newmatrix = my_mesh.blenObject.matrix_world * global_matrix
+		#loc, rot, scale = my_mesh.blenObject.matrix_world * global_matrix
+		lclrot = tuple_rad_to_deg(rot)
+		
+		fw('\n\tModel: %i, "Model::' % get_fbx_MeshID(my_mesh.blenObject))
+		fw('%s", "Mesh" {' % my_mesh.fbxName)
+		fw('''
+		Version: 232
+		Properties70:  {
+			P: "ScalingMin", "Vector3D", "Vector", "",1,1,1
+			P: "DefaultAttributeIndex", "int", "Integer", "",0''')
+		fw('\n\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",%.15f,%.15f,%.15f' % loc)
+		fw('\n\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A+",%.15f,%.15f,%.15f' % scale)
+		fw('\n\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A+",%.15f,%.15f,%.15f' % lclrot)
+		fw('''
+			P: "Size", "double", "Number", "",100
+			P: "Look", "enum", "", "",1
+		}''')
+		fw('\n\t\tShading: Y')
+		fw('\n\t\tCulling: "CullingOff"')
+		fw('\n\t}')
+		
+	#################################
+	# Cameras
 	def write_camera_switch():
 		fw('''
 	Model: "Model::Camera Switcher", "CameraSwitcher" {
@@ -778,7 +970,8 @@ References:  {
 		CameraName: 100
 		CameraIndexName:
 	}''')
-
+	
+	
 	def write_camera_dummy(name, loc, near, far, proj_type, up):
 		fw('\n\tModel: "Model::%s", "Camera" {' % name)
 		fw('\n\t\tVersion: 232')
@@ -877,7 +1070,7 @@ References:  {
 		   '\n\t\tCameraOrthoZoom: 1'
 		   '\n\t}'
 		   )
-
+	
 	def write_camera_default():
 		# This sucks but to match FBX converter its easier to
 		# write the cameras though they are not needed.
@@ -888,7 +1081,7 @@ References:  {
 		write_camera_dummy('Producer Back', (0, 0, -4000), 1, 30000, 1, (0, 1, 0))
 		write_camera_dummy('Producer Right', (4000, 0, 0), 1, 30000, 1, (0, 1, 0))
 		write_camera_dummy('Producer Left', (-4000, 0, 0), 1, 30000, 1, (0, 1, 0))
-
+	
 	def write_camera(my_cam):
 		"""
 		Write a blender camera
@@ -985,7 +1178,7 @@ References:  {
 		   )
 
 		fw('\n\t\t\tProperty: "SafeAreaAspectRatio", "double", "",%.6f' % aspect)
-
+		
 		fw('\n\t\t\tProperty: "Use2DMagnifierZoom", "bool", "",0'
 		   '\n\t\t\tProperty: "2D Magnifier Zoom", "Real", "A+",100'
 		   '\n\t\t\tProperty: "2D Magnifier X", "Real", "A+",50'
@@ -1003,7 +1196,7 @@ References:  {
 		   )
 
 		fw('\n\t\t}')
-
+		
 		fw('\n\t\tMultiLayer: 0'
 		   '\n\t\tMultiTake: 0'
 		   '\n\t\tShading: Y'
@@ -1011,29 +1204,30 @@ References:  {
 		   '\n\t\tTypeFlags: "Camera"'
 		   '\n\t\tGeometryVersion: 124'
 		   )
-
+		
 		fw('\n\t\tPosition: %.6f,%.6f,%.6f' % loc)
 		fw('\n\t\tUp: %.6f,%.6f,%.6f' % (matrix_rot * Vector((0.0, 1.0, 0.0)))[:])
 		fw('\n\t\tLookAt: %.6f,%.6f,%.6f' % (matrix_rot * Vector((0.0, 0.0, -1.0)))[:])
-
+		
 		#fw('\n\t\tUp: 0,0,0' )
 		#fw('\n\t\tLookAt: 0,0,0' )
-
+		
 		fw('\n\t\tShowInfoOnMoving: 1')
 		fw('\n\t\tShowAudio: 0')
 		fw('\n\t\tAudioColor: 0,1,0')
 		fw('\n\t\tCameraOrthoZoom: 1')
 		fw('\n\t}')
-
+	
+	# lights
 	def write_light(my_light):
 		light = my_light.blenObject.data
 		fw('\n\tModel: "Model::%s", "Light" {' % my_light.fbxName)
 		fw('\n\t\tVersion: 232')
-
+		
 		write_object_props(my_light.blenObject, None, my_light.parRelMatrix())
-
+		
 		# Why are these values here twice?????? - oh well, follow the holy sdk's output
-
+		
 		# Blender light types match FBX's, funny coincidence, we just need to
 		# be sure that all unsupported types are made into a point light
 		#ePOINT,
@@ -1041,19 +1235,19 @@ References:  {
 		#eSPOT
 		light_type_items = {'POINT': 0, 'SUN': 1, 'SPOT': 2, 'HEMI': 3, 'AREA': 4}
 		light_type = light_type_items[light.type]
-
+		
 		if light_type > 2:
 			light_type = 1  # hemi and area lights become directional
-
+		
 		if light.type == 'HEMI':
 			do_light = not (light.use_diffuse or light.use_specular)
 			do_shadow = False
 		else:
 			do_light = not (light.use_only_shadow or (not light.use_diffuse and not light.use_specular))
 			do_shadow = (light.shadow_method in {'RAY_SHADOW', 'BUFFER_SHADOW'})
-
+		
 		# scale = abs(global_matrix.to_scale()[0])  # scale is always uniform in this case  #  UNUSED
-
+		
 		fw('\n\t\t\tProperty: "LightType", "enum", "",%i' % light_type)
 		fw('\n\t\t\tProperty: "CastLightOnObject", "bool", "",1')
 		fw('\n\t\t\tProperty: "DrawVolumetricLight", "bool", "",1')
@@ -1066,9 +1260,9 @@ References:  {
 			fw('\n\t\t\tProperty: "Cone angle", "Cone angle", "A+",%.2f' % math.degrees(light.spot_size))
 		fw('\n\t\t\tProperty: "Fog", "Fog", "A+",50')
 		fw('\n\t\t\tProperty: "Color", "Color", "A",%.2f,%.2f,%.2f' % tuple(light.color))
-
+		
 		fw('\n\t\t\tProperty: "Intensity", "Intensity", "A+",%.2f' % (min(light.energy * 100.0, 200.0)))  # clamp below 200
-
+		
 		fw('\n\t\t\tProperty: "Fog", "Fog", "A+",50')
 		fw('\n\t\t\tProperty: "LightType", "enum", "",%i' % light_type)
 		fw('\n\t\t\tProperty: "CastLightOnObject", "bool", "",%i' % do_light)
@@ -1078,7 +1272,7 @@ References:  {
 		fw('\n\t\t\tProperty: "GoboProperty", "object", ""')
 		fw('\n\t\t\tProperty: "DecayType", "enum", "",0')
 		fw('\n\t\t\tProperty: "DecayStart", "double", "",%.2f' % light.distance)
-
+		
 		fw('\n\t\t\tProperty: "EnableNearAttenuation", "bool", "",0'
 		   '\n\t\t\tProperty: "NearAttenuationStart", "double", "",0'
 		   '\n\t\t\tProperty: "NearAttenuationEnd", "double", "",0'
@@ -1086,11 +1280,11 @@ References:  {
 		   '\n\t\t\tProperty: "FarAttenuationStart", "double", "",0'
 		   '\n\t\t\tProperty: "FarAttenuationEnd", "double", "",0'
 		   )
-
+		
 		fw('\n\t\t\tProperty: "CastShadows", "bool", "",%i' % do_shadow)
 		fw('\n\t\t\tProperty: "ShadowColor", "ColorRGBA", "",0,0,0,1')
 		fw('\n\t\t}')
-
+		
 		fw('\n\t\tMultiLayer: 0'
 		   '\n\t\tMultiTake: 0'
 		   '\n\t\tShading: Y'
@@ -1099,8 +1293,8 @@ References:  {
 		   '\n\t\tGeometryVersion: 124'
 		   '\n\t}'
 		   )
-
-	# matrixOnly is not used at the moment
+	
+	# null objects
 	def write_null(my_null=None, fbxName=None, fbxType="Null", fbxTypeFlags="Null"):
 		# ob can be null
 		if not fbxName:
@@ -1114,7 +1308,7 @@ References:  {
 		else:
 			poseMatrix = write_object_props()[3]
 
-		pose_items.append((fbxName, poseMatrix))
+		pose_items.append((fbxName, poseMatrix, my_null.name))
 
 		fw('\n\t\t}'
 		   '\n\t\tMultiLayer: 0'
@@ -1131,11 +1325,14 @@ References:  {
 		world_amb = world.ambient_color[:]
 	else:
 		world_amb = 0.0, 0.0, 0.0  # default value
-
-	def write_material(matname, mat):
-		fw('\n\tMaterial: "Material::%s", "" {' % matname)
-
-		# Todo, add more material Properties.
+	
+	
+	# Materials
+	def write_material(matname, mat, index):
+		baseid = 400000 + index
+		fw('\n\tMaterial: %i, ' % baseid)
+		fw('"Material::%s", "" {' % mat.name)
+		
 		if mat:
 			mat_cold = tuple(mat.diffuse_color)
 			mat_cols = tuple(mat.specular_color)
@@ -1168,121 +1365,82 @@ References:  {
 			mat_emit = 0.0
 			mat_shadeless = False
 			mat_shader = 'Phong'
-
+		
 		fw('\n\t\tVersion: 102')
 		fw('\n\t\tShadingModel: "%s"' % mat_shader.lower())
 		fw('\n\t\tMultiLayer: 0')
-
-		fw('\n\t\tProperties60:  {')
-		fw('\n\t\t\tProperty: "ShadingModel", "KString", "", "%s"' % mat_shader)
-		fw('\n\t\t\tProperty: "MultiLayer", "bool", "",0')
-		fw('\n\t\t\tProperty: "EmissiveColor", "ColorRGB", "",%.4f,%.4f,%.4f' % mat_cold)  # emit and diffuse color are he same in blender
-		fw('\n\t\t\tProperty: "EmissiveFactor", "double", "",%.4f' % mat_emit)
-
-		fw('\n\t\t\tProperty: "AmbientColor", "ColorRGB", "",%.4f,%.4f,%.4f' % mat_colamb)
-		fw('\n\t\t\tProperty: "AmbientFactor", "double", "",%.4f' % mat_amb)
-		fw('\n\t\t\tProperty: "DiffuseColor", "ColorRGB", "",%.4f,%.4f,%.4f' % mat_cold)
-		fw('\n\t\t\tProperty: "DiffuseFactor", "double", "",%.4f' % mat_dif)
-		fw('\n\t\t\tProperty: "Bump", "Vector3D", "",0,0,0')
-		fw('\n\t\t\tProperty: "TransparentColor", "ColorRGB", "",1,1,1')
-		fw('\n\t\t\tProperty: "TransparencyFactor", "double", "",%.4f' % (1.0 - mat_alpha))
+		fw('\n\t\tProperties70:  {')
+		fw('\n\t\t\tP: "EmissiveColor", "Color", "", "A",%.4f,%.4f,%.4f' % mat_cold)
+		fw('\n\t\t\tP: "EmissiveFactor", "Number", "", "A",%.4f' % mat_emit)
+		fw('\n\t\t\tP: "AmbientColor", "Color", "", "A",%.4f,%.4f,%.4f' % mat_colamb)
+		fw('\n\t\t\tP: "DiffuseFactor", "Number", "", "A",%.4f' % mat_dif)
+		fw('\n\t\t\tP: "TransparentColor", "Color", "", "A",1,1,1')
 		if not mat_shadeless:
-			fw('\n\t\t\tProperty: "SpecularColor", "ColorRGB", "",%.4f,%.4f,%.4f' % mat_cols)
-			fw('\n\t\t\tProperty: "SpecularFactor", "double", "",%.4f' % mat_spec)
-			fw('\n\t\t\tProperty: "ShininessExponent", "double", "",80.0')
-			fw('\n\t\t\tProperty: "ReflectionColor", "ColorRGB", "",0,0,0')
-			fw('\n\t\t\tProperty: "ReflectionFactor", "double", "",1')
-		fw('\n\t\t\tProperty: "Emissive", "ColorRGB", "",0,0,0')
-		fw('\n\t\t\tProperty: "Ambient", "ColorRGB", "",%.1f,%.1f,%.1f' % mat_colamb)
-		fw('\n\t\t\tProperty: "Diffuse", "ColorRGB", "",%.1f,%.1f,%.1f' % mat_cold)
+			fw('\n\t\t\tP: "SpecularColor", "ColorRGB", "Color", "",%.4f,%.4f,%.4f' % mat_cols)
+			fw('\n\t\t\tP: "SpecularFactor", "double", "Number", "",%.4f' % mat_spec)
+			fw('\n\t\t\tP: "ShininessExponent", "double", "Number", "",80')
+			fw('\n\t\t\tP: "ReflectionColor", "ColorRGB", "Color", "",0,0,0')
+			fw('\n\t\t\tP: "ReflectionFactor", "double", "Number", "",1')
+		fw('\n\t\t\tP: "Emissive", "ColorRGB", "Color", "",0,0,0')
+		fw('\n\t\t\tP: "Ambient", "ColorRGB", "Color", "",%.1f,%.1f,%.1f' % mat_colamb)
+		fw('\n\t\t\tP: "Diffuse", "ColorRGB", "Color", "",%.1f,%.1f,%.1f' % mat_cold)
 		if not mat_shadeless:
-			fw('\n\t\t\tProperty: "Specular", "ColorRGB", "",%.1f,%.1f,%.1f' % mat_cols)
-			fw('\n\t\t\tProperty: "Shininess", "double", "",%.1f' % mat_hard)
-		fw('\n\t\t\tProperty: "Opacity", "double", "",%.1f' % mat_alpha)
+			fw('\n\t\t\tP: "Specular", "ColorRGB", "Color", "",%.1f,%.1f,%.1f' % mat_cols)
+			fw('\n\t\t\tP: "Shininess", "double", "Number", "",%.1f' % mat_hard)
+		fw('\n\t\t\tP: "Opacity", "double", "Number", "",%.1f' % mat_alpha)
 		if not mat_shadeless:
-			fw('\n\t\t\tProperty: "Reflectivity", "double", "",0')
-
+			fw('\n\t\t\tP: "Reflectivity", "double", "Number", "",0')
 		fw('\n\t\t}')
 		fw('\n\t}')
-
-	# tex is an Image (Arystan)
-	def write_video(texname, tex):
-		# Same as texture really!
-		fw('\n\tVideo: "Video::%s", "Clip" {' % (texname + '_ncl1_1'))
-
+	
+	
+	# Videos
+	def write_video(texname, tex, vidindex):
+		fw('\n\tVideo: %i, ' % (vidindex + 600000))
+		fw('"Video::%s", "Clip" {' % (texname))
+		
+		if tex:
+			fname_rel = bpy_extras.io_utils.path_reference(tex.filepath, base_src, base_dst, 'AUTO', "", copy_set, tex.library)
+			fname_strip = bpy.path.basename(fname_rel)
+		else:
+			fname_strip = fname_rel = ""
+		
 		fw('''
 		Type: "Clip"
-		Properties60:  {
-			Property: "FrameRate", "double", "",0
-			Property: "LastFrame", "int", "",0
-			Property: "Width", "int", "",0
-			Property: "Height", "int", "",0''')
-		if tex:
-			fname_rel = bpy_extras.io_utils.path_reference(tex.filepath, base_src, base_dst, 'AUTO', "", copy_set, tex.library)
-			fname_strip = bpy.path.basename(fname_rel)
-		else:
-			fname_strip = fname_rel = ""
-
-		fw('\n\t\t\tProperty: "Path", "charptr", "", "%s"' % fname_strip)
-
-		fw('''
-			Property: "StartFrame", "int", "",0
-			Property: "StopFrame", "int", "",0
-			Property: "PlaySpeed", "double", "",1
-			Property: "Offset", "KTime", "",0
-			Property: "InterlaceMode", "enum", "",0
-			Property: "FreeRunning", "bool", "",0
-			Property: "Loop", "bool", "",0
-			Property: "AccessMode", "enum", "",0
+		Properties70:  {
+			P: "Path", "KString", "XRefUrl", "", "%s"
+			P: "PlaySpeed", "double", "Number", "",1
 		}
-		UseMipMap: 0''')
-
-		fw('\n\t\tFilename: "%s"' % fname_strip)
-		fw('\n\t\tRelativeFilename: "%s"' % fname_rel)  # make relative
+		UseMipMap: 0''' % tex.filepath)
+		fw('\n\t\tFilename: "%s"' % tex.filepath)
+		fw('\n\t\tRelativeFilename: "%s"' % fname_rel)
 		fw('\n\t}')
-
+	
+	# Textures
 	def write_texture(texname, tex, num):
-		# if tex is None then this is a dummy tex
-		fw('\n\tTexture: "Texture::%s", "TextureVideoClip" {' % texname)
+		fw('\n\tTexture: %i, ' % (num + 500000))
+		fw('"Texture::%s", "" {' % texname)
 		fw('\n\t\tType: "TextureVideoClip"')
 		fw('\n\t\tVersion: 202')
-		# TODO, rare case _empty_ exists as a name.
+		
 		fw('\n\t\tTextureName: "Texture::%s"' % texname)
-
-		fw('''
-		Properties60:  {
-			Property: "Translation", "Vector", "A+",0,0,0
-			Property: "Rotation", "Vector", "A+",0,0,0
-			Property: "Scaling", "Vector", "A+",1,1,1''')
-		fw('\n\t\t\tProperty: "Texture alpha", "Number", "A+",%i' % num)
-
-		# WrapModeU/V 0==rep, 1==clamp, TODO add support
-		fw('''
-			Property: "TextureTypeUse", "enum", "",0
-			Property: "CurrentTextureBlendMode", "enum", "",1
-			Property: "UseMaterial", "bool", "",0
-			Property: "UseMipMap", "bool", "",0
-			Property: "CurrentMappingType", "enum", "",0
-			Property: "UVSwap", "bool", "",0''')
-
-		fw('\n\t\t\tProperty: "WrapModeU", "enum", "",%i' % tex.use_clamp_x)
-		fw('\n\t\t\tProperty: "WrapModeV", "enum", "",%i' % tex.use_clamp_y)
-
-		fw('''
-			Property: "TextureRotationPivot", "Vector3D", "",0,0,0
-			Property: "TextureScalingPivot", "Vector3D", "",0,0,0
-			Property: "VideoProperty", "object", ""
-		}''')
-
+		fw('\n\t\tProperties70:  {')
+		fw('\n\t\t\tP: "Texture alpha", "Number", "", "A+",%i' % num)
+		fw('\n\t\t\tP: "UVSet", "KString", "", "", "default"')
+		fw('\n\t\t\tP: "VideoProperty", "object", "", ""')
+		fw('\n\t\t\tP: "CurrentMappingType", "enum", "", "",0')
+		fw('\n\t\t\tP: "WrapModeU", "enum", "", "",%i' % tex.use_clamp_x)
+		fw('\n\t\t\tP: "WrapModeV", "enum", "", "",%i' % tex.use_clamp_y)
+		fw('\n\t\t}')
 		fw('\n\t\tMedia: "Video::%s"' % texname)
-
+		
 		if tex:
 			fname_rel = bpy_extras.io_utils.path_reference(tex.filepath, base_src, base_dst, 'AUTO', "", copy_set, tex.library)
 			fname_strip = bpy.path.basename(fname_rel)
 		else:
 			fname_strip = fname_rel = ""
-
-		fw('\n\t\tFileName: "%s"' % fname_strip)
+		
+		fw('\n\t\tFileName: "%s"' % tex.filepath)
 		fw('\n\t\tRelativeFilename: "%s"' % fname_rel)  # need some make relative command
 
 		fw('''
@@ -1291,24 +1449,19 @@ References:  {
 		Texture_Alpha_Source: "None"
 		Cropping: 0,0,0,0
 	}''')
-
-	def write_deformer_skin(obname):
-		"""
-		Each mesh has its own deformer
-		"""
-		fw('\n\tDeformer: "Deformer::Skin %s", "Skin" {' % obname)
-		fw('''
-		Version: 100
-		MultiLayer: 0
-		Type: "Skin"
-		Properties60:  {
-		}
+	
+	
+	# deformers (skin)
+	def write_deformer_skin(obname, defid):
+		# Each mesh has its own deformer
+		fw('\n\tDeformer: %i,' % defid)
+		fw(''' "Deformer::Skin %s", "Skin" {
+		Version: 101
 		Link_DeformAcuracy: 50
-	}''')
-
-	# in the example was 'Bip01 L Thigh_2'
-	def write_sub_deformer_skin(my_mesh, my_bone, weights):
-
+	}''' % obname)
+	
+	# deformers (cluster)
+	def write_sub_deformer_skin(my_mesh, my_bone, weights, defid):
 		"""
 		Each subdeformer is specific to a mesh, but the bone it links to can be used by many sub-deformers
 		So the SubDeformer needs the mesh-object name as a prefix to make it unique
@@ -1316,16 +1469,17 @@ References:  {
 		Its possible that there is no matching vgroup in this mesh, in that case no verts are in the subdeformer,
 		a but silly but dosnt really matter
 		"""
-		fw('\n\tDeformer: "SubDeformer::Cluster %s %s", "Cluster" {' % (my_mesh.fbxName, my_bone.fbxName))
-
+		
+		fw('\n\tDeformer: %i, ' % defid)
+		fw('"SubDeformer::Cluster %s ' % my_mesh.fbxName)
+		fw('%s", "Cluster" {' % my_bone.fbxName)
 		fw('''
 		Version: 100
-		Properties60:  {
-			Property: "SrcModelReference", "object", ""
-			Property: "SrcModel", "object", ""
+		Properties70:  {
+			P: "SrcModel", "object", "", ""
 		}
 		UserData: "", ""''')
-
+		
 		# Support for bone parents
 		if my_mesh.fbxBoneParent:
 			if my_mesh.fbxBoneParent == my_bone:
@@ -1345,34 +1499,35 @@ References:  {
 				vgroup_data = [(j, weight[group_index]) for j, weight in enumerate(weights[1]) if weight[group_index]]
 			else:
 				vgroup_data = []
-
-		fw('\n\t\tIndexes: ')
-
-		i = -1
-		for vg in vgroup_data:
-			if i == -1:
-				fw('%i' % vg[0])
-				i = 0
-			else:
-				if i == 23:
-					fw('\n\t\t')
+		
+		if len(vgroup_data) > 0:
+			fw('\n\t\tIndexes: *%i {\n\t\t\ta: ' % len(vgroup_data))
+			i = -1
+			for vg in vgroup_data:
+				if i == -1:
+					fw('%i' % vg[0])
 					i = 0
-				fw(',%i' % vg[0])
-			i += 1
-
-		fw('\n\t\tWeights: ')
-		i = -1
-		for vg in vgroup_data:
-			if i == -1:
-				fw('%.8f' % vg[1])
-				i = 0
-			else:
-				if i == 38:
-					fw('\n\t\t')
+				else:
+					if i == 104:
+						fw('\n\t\t')
+						i = 0
+					fw(',%i' % vg[0])
+				i += 1
+			fw('\n\t\t}')
+			fw('\n\t\tWeights: *%i {\n\t\t\ta: ' % len(vgroup_data))
+			
+			i = -1
+			for vg in vgroup_data:
+				if i == -1:
+					fw('%.8f' % vg[1])
 					i = 0
-				fw(',%.8f' % vg[1])
-			i += 1
-
+				else:
+					if i == 38:
+						fw('\n\t\t')
+						i = 0
+					fw(',%.8f' % vg[1])
+				i += 1
+			fw('\n\t\t}')
 		# Set TransformLink to the global transform of the bone and Transform
 		# equal to the mesh's transform in bone space.
 		# http://area.autodesk.com/forum/autodesk-fbx/fbx-sdk/why-the-values-return-by-fbxcluster-gettransformmatrix-x-not-same-with-the-value-in-ascii-fbx-file/
@@ -1384,10 +1539,94 @@ References:  {
 		global_bone_matrix_string = mat4x4str(global_bone_matrix )
 		transform_matrix_string = mat4x4str(transform_matrix )
 
-		fw('\n\t\tTransform: %s' % transform_matrix_string)
-		fw('\n\t\tTransformLink: %s' % global_bone_matrix_string)
-		fw('\n\t}')
+		fw('\n\t\tTransform: *16 {\n\t\t\ta: %s' % transform_matrix_string)
+		fw('\n\t\t}\n\t\tTransformLink: *16 {\n\t\t\ta: %s' % global_bone_matrix_string)
+		fw('\n\t\t}\n\t}')
 	
+	
+	# Blend shapes/morph targets:
+	
+	# shape geometry
+	def write_blend_shape_geometry(my_mesh):
+		key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
+		shapeid = get_fbx_GeomID(my_mesh.blenObject) + 1000
+		
+		for kb in key_blocks[1:]:
+			shapeid += 1
+			
+			fw('\n\tGeometry: %i, ' % shapeid)
+			fw('"Geometry::%s", "Shape" {' % kb.name)
+			fw('\n\t\tVersion: 100')
+			
+			basis_verts = key_blocks[0].data
+			delta_verts = []
+			
+			vertscount = 0
+			for j, kv in enumerate(kb.data):
+				delta = kv.co - basis_verts[j].co
+				if delta.length > 0.000001:
+					vertscount += 1
+			
+			fw('\n\t\tIndexes: *%i {\n\t\t\ta: ' % vertscount)
+			i = -1
+			for j, kv in enumerate(kb.data):
+				delta = kv.co - basis_verts[j].co
+				if delta.length > 0.000001:
+					if i == -1:
+						fw('%d' % j)
+					else:
+						if i == 14:
+							fw('\n\t\t\t')
+							i = 0
+						fw(',%d' % j)
+					delta_verts.append(delta[:])
+					i += 1
+			
+			fw('\n\t\t}\n\t\tVertices: *%i {\n\t\t\ta: ' % (len(delta_verts) * 3))
+			i = -1
+			for dv in delta_verts:
+				if i == -1:
+					fw("%.6f,%.6f,%.6f" % dv)
+				else:
+					if i == 16:
+						fw('\n\t\t\t')
+						i = 0
+					fw(",%.6f,%.6f,%.6f" % dv)
+				i += 1
+			
+			fw('\n\t\t}\n\t\tNormals: *%i {\n\t\t\ta: ' % (len(delta_verts) * 3))
+			i = -1
+			for j in range(len(delta_verts)):
+				if i == -1:
+					fw("0,0,0")
+				else:
+					if i == 16:
+						fw('\n\t\t\t')
+						i = 0
+					fw(",0,0,0")
+				i += 1
+			
+			fw('\n\t\t}\n\t}')
+	
+	# shape deformer
+	def write_blend_shape_deformer(my_mesh):
+		key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
+		shapeid = get_fbx_GeomID(my_mesh.blenObject) + 601000
+		
+		fw('\n\tDeformer: %i, "Deformer::", "BlendShape" {' % shapeid)
+		fw('\n\t\tVersion: 100\n\t}')
+		
+		for kb in key_blocks[1:]:
+			shapeid += 1
+			fw('\n\tDeformer: %i, ' % shapeid)
+			fw('''"SubDeformer::%s", "BlendShapeChannel" {
+		Version: 100
+		DeformPercent: 0
+		FullWeights: *1 {
+			a: 100
+		} 
+	}''' % kb.name)
+		
 	
 	
 	#		Calculate uv direction for tangent space:
@@ -1413,7 +1652,7 @@ References:  {
 		return tangentdir
 	
 	
-	
+	# Geometry Data
 	def write_mesh(my_mesh):
 		#Gather mesh data
 		me = my_mesh.blenData
@@ -1427,8 +1666,7 @@ References:  {
 						my_mesh.blenObject.data.shape_keys and
 						len(my_mesh.blenObject.data.vertices) == len(me.vertices))
 		
-		fw('\n\tModel: "Model::%s", "Mesh" {' % my_mesh.fbxName)
-		fw('\n\t\tVersion: 232')  # newline is added in write_object_props
+		fw(('\n\tGeometry: %i, ' % get_fbx_GeomID(my_mesh.blenObject)) +  ('"Geometry::%s", "Mesh" {' % my_mesh.fbxName))
 		
 		me_vertices = [v for v in me.vertices]
 		me_edges = [e for e in me.edges] if use_mesh_edges else ()
@@ -1446,7 +1684,6 @@ References:  {
 		
 		is_collision = ("UCX_" in meshobject.name)
 		
-		
 		normalsmode = normals_export_mode
 		usedefaultnormals = False
 		export_tangents = False
@@ -1457,7 +1694,7 @@ References:  {
 				if len(me.tessface_uv_textures) > tangentspace_uvlnum:
 					export_tangents = True
 			
-			# check if required data exists / autodetect if needed
+			# check if required normals data exists / autodetect if needed
 			if normalsmode == 'AUTO':
 				if 'polyn_meshdata' in meshobject or 'vertexn_meshdata' in meshobject:
 					normalsmode = 'NORMEDIT'
@@ -1488,8 +1725,6 @@ References:  {
 		#################
 		# Normals:
 		if not usedefaultnormals:
-			
-			#################################################
 			# Custom - Included normals editor
 			if normalsmode == 'NORMEDIT':
 				# convert per vertex to per poly if needed
@@ -1514,7 +1749,6 @@ References:  {
 						operator.report({'WARNING'}, "List size mismatch")
 						usedefaultnormals = True
 				
-			################################################################
 			# Custom - adsn's Recalc Vertex Normals addon
 			elif normalsmode == 'RECALCVN':
 				if 'vertex_normal_list' in meshobject:
@@ -1526,47 +1760,24 @@ References:  {
 						operator.report({'WARNING'}, "List size mismatch")
 						usedefaultnormals = True
 			
-		
-		######################################################################
 		# Blender split vertex normals - Default / fallback
 		if usedefaultnormals:
 			me.calc_normals_split()
 			me_normals = [t.normal.copy() for t in me.loops]
-			me.free_normals_split()
-		
-		
+			
 		
 		##############################################################
 		# Tangents + Binormals:
 		if export_tangents:
-			
-			############################
-			# Blender Default - MikkTSpace (read from loops)
-			# - copy() because me_tangents is cleared by calc_normals_split
-			if export_tangentspace_base == 'DEFAULT':
-				if normalsmode == 'BLEND':
-					me.calc_normals_split()
-					me.calc_tangents(me.uv_layers[tangentspace_uvlnum].name)
-					
-					me_tangents = [t.tangent.copy() for t in me.loops]
-					me_binormals = [t.bitangent.copy() for t in me.loops]
-					
-					me.free_tangents()
-					me.free_normals_split()
-				else:
-					operator.report({'WARNING'}, "Default Tangents require default normals")
-					export_tangents = False
-				
-			############################
 			# Custom - modified Lengyel's method
-			elif export_tangentspace_base == 'LENGYEL':
+			if export_tangentspace_base == 'LENGYEL':
+				me.free_normals_split()
 				t_uvlayer = [uvl for uvl in me.tessface_uv_textures[tangentspace_uvlnum].data]
 				weightslist = []
 				
 				for i in range(len(me_faces)):
 					faceverts = []
 					uvface = []
-					
 					uvface.append(t_uvlayer[i].uv1.copy())
 					uv_vertcoords.append(t_uvlayer[i].uv1.copy())
 					uvface.append(t_uvlayer[i].uv2.copy())
@@ -1594,7 +1805,6 @@ References:  {
 						me_tangents.append(tan)
 						me_binormals.append(me_normals[i].cross(tan))
 					
-					
 					tempvect = Vector((0.0,0.0,0.0))
 					smoothlist = [[],[],[],[]]
 					vertstoremove = []
@@ -1604,7 +1814,6 @@ References:  {
 					# - averages the tangents for each vert connected to a smoothed face to remove 'jittering'
 					# - smoothing is based on uv islands each vert's faces are in
 					for i in range(len(me_vertices)):
-						
 						# Gather Loop
 						# - slow - checks the index list for uv islands each vert is part of
 						for j in vindexlist2:
@@ -1645,7 +1854,6 @@ References:  {
 							for t in smoothlist[0]:
 								new_tangents[t] = tempvect.copy()
 								me_binormals[t] = me_normals[t].cross(tempvect)
-							
 							if len(smoothlist[1]) > 0:
 								tempvect.zero()
 								for l in smoothlist[1]:
@@ -1654,7 +1862,6 @@ References:  {
 								for t in smoothlist[1]:
 									new_tangents[t] = tempvect.copy()
 									me_binormals[t] = me_normals[t].cross(tempvect)
-									
 								if len(smoothlist[2]) > 0:
 									tempvect.zero()
 									for l in smoothlist[2]:
@@ -1663,7 +1870,6 @@ References:  {
 									for t in smoothlist[2]:
 										new_tangents[t] = tempvect.copy()
 										me_binormals[t] = me_normals[t].cross(tempvect)
-										
 									if len(smoothlist[3]) > 0:
 										tempvect.zero()
 										for l in smoothlist[3]:
@@ -1676,94 +1882,114 @@ References:  {
 						# reset vars for next iteration
 						smoothlist = [[],[],[],[]]
 						vertstoremove = []
-					
 					me_tangents = [v for v in new_tangents]
+			else:
+				# Blender Default - Mikk TSpace
+				# - copy() because me_tangents is cleared by calc_normals_split
+				if normalsmode == 'BLEND':
+					me.calc_tangents(me.uv_layers[tangentspace_uvlnum].name)
+					me_tangents = [t.tangent.copy() for t in me.loops]
+					me_binormals = [t.bitangent.copy() for t in me.loops]
+					me.free_tangents()
+					me.free_normals_split()
+				else:
+					operator.report({'WARNING'}, "Default Tangents require default normals")
+					export_tangents = False
+		else:
+			me.free_normals_split()
 		
 		######################################
+		# Mesh Geometry Pose:
+		# - use global matrix here to apply scale + axis settings to the mesh
+		poseMatrix = (meshobject.matrix_world * global_matrix)
+		pose_items.append((my_mesh.fbxName, poseMatrix, my_mesh.fbxName))
 		
-		
-		# use global matrix here to apply scale + axis settings to the mesh
-		poseMatrix = write_object_props(my_mesh.blenObject, None, meshobject.matrix_world * global_matrix)[3]
-		
-		# Calculate the global transform for the mesh in the bind pose the same way we do
-		# in write_sub_deformer_skin
-		globalMeshBindPose = my_mesh.matrixWorld * mtx4_z90
-		pose_items.append((my_mesh.fbxName, globalMeshBindPose))
 		
 		if do_shapekeys:
+			fw('\n\t\tProperties70:  {')
 			for kb in my_mesh.blenObject.data.shape_keys.key_blocks[1:]:
-				fw('\n\t\t\tProperty: "%s", "Number", "AN",0' % kb.name)
-		
-		fw('\n\t\t}')
-		
-		fw('\n\t\tMultiLayer: 0'
-		   '\n\t\tMultiTake: 1'
-		   '\n\t\tShading: Y'
-		   '\n\t\tCulling: "CullingOff"'
-		   )
+				fw('\n\t\t\tP: "%s", "Number", "", "A",0' % kb.name)
+			fw('\n\t\t}')
 		
 		############################################
 		# Write the Real Mesh data here
 		
-		fw('\n\t\tVertices: ')
-		i = -1
+		# Vertices
+		fw('''
+		Vertices: *%i {
+			a: ''' % (len(me_vertices) * 3))
 		
+		i = -1
+		totalvcnt = 1
 		for v in me_vertices:
 			if i == -1:
-				fw('%.6f,%.6f,%.6f' % v.co[:])
+				fw('%.6f,%.6f,%.6f,' % v.co[:])
 				i = 0
 			else:
-				if i == 4:
-					fw('\n\t\t')
+				if i == 16:
+					fw('\n')
 					i = 0
-				fw(',%.6f,%.6f,%.6f' % v.co[:])
+				if totalvcnt >= len(me_vertices):
+					fw('%.6f,%.6f,%.6f' % v.co[:])
+				else:
+					fw('%.6f,%.6f,%.6f,' % v.co[:])
+			
 			i += 1
+			totalvcnt += 1
+		fw('\n\t\t}')
 		
-		fw('\n\t\tPolygonVertexIndex: ')
+		totalvertcount = 0
+		for f in me_faces:
+			totalvertcount += len(f.vertices)
+		
+		# PolygonVertIndices
+		fw('''
+		PolygonVertexIndex: *%i {
+			a: ''' % totalvertcount)
 		i = -1
+		totalfcnt = 1
 		for f in me_faces:
 			fi = [fv for fv in f.vertices]
 			# last index XORd w. -1 indicates end of face
 			if i == -1:
 				if len(fi) == 3:
-					fw('%i,%i,%i' % (fi[0], fi[1], fi[2] ^ -1))
+					fw('%i,%i,%i,' % (fi[0], fi[1], fi[2] ^ -1))
 				else:
-					fw('%i,%i,%i,%i' % (fi[0], fi[1], fi[2], fi[3] ^ -1))
+					fw('%i,%i,%i,%i,' % (fi[0], fi[1], fi[2], fi[3] ^ -1))
 				i = 0
 			else:
-				if i == 13:
-					fw('\n\t\t')
+				if i == 26:
+					fw('\n')
 					i = 0
-				if len(fi) == 3:
-					fw(',%i,%i,%i' % (fi[0], fi[1], fi[2] ^ -1))
-				else:
-					fw(',%i,%i,%i,%i' % (fi[0], fi[1], fi[2], fi[3] ^ -1))
-			i += 1
-		
-		# write loose edges as faces.
-		if len(me_edges) > 0:
-			for ed in me_edges:
-				if ed.is_loose:
-					ed_val = ed.vertices[:]
-					ed_val = ed_val[0], ed_val[-1] ^ -1
-					if i == -1:
-						fw('%i,%i' % ed_val)
-						i = 0
+				
+				if totalfcnt >= len(me_faces):
+					if len(fi) == 3:
+						fw('%i,%i,%i' % (fi[0], fi[1], fi[2] ^ -1))
 					else:
-						if i == 13:
-							fw('\n\t\t')
-							i = 0
-						fw(',%i,%i' % ed_val)
-				i += 1
+						fw('%i,%i,%i,%i' % (fi[0], fi[1], fi[2], fi[3] ^ -1))
+
+				else:
+					if len(fi) == 3:
+						fw('%i,%i,%i,' % (fi[0], fi[1], fi[2] ^ -1))
+					else:
+						fw('%i,%i,%i,%i,' % (fi[0], fi[1], fi[2], fi[3] ^ -1))
+			i += 1
+			totalfcnt += 1
+		fw('\n\t\t}')
+		
+		# Edges - not needed for UE meshes
+		if len(me_edges) > 0:
+			fw('''
+		Edges: *%i {
+			a: ''' % len(me_edges))
 			
-			fw('\n\t\tEdges: ')
 			i = -1
 			for ed in me_edges:
 				if i == -1:
 					fw('%i,%i' % (ed.vertices[0], ed.vertices[1]))
 					i = 0
 				else:
-					if i == 13:
+					if i == 16:
 						fw('\n\t\t')
 						i = 0
 					fw(',%i,%i' % (ed.vertices[0], ed.vertices[1]))
@@ -1780,43 +2006,53 @@ References:  {
 			Name: ""
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "Direct"
-			Normals: ''')
+			Normals: *%i {
+				a: ''' % (len(me_normals) * 3))
 
 		i = -1
+		normscount = 1
 		for v in me_normals:
 			if i == -1:
-				fw('%.6f,%.6f,%.6f' % v[:])
+				fw('%.6f,%.6f,%.6f,' % v[:])
 				i = 0
 			else:
-				if i == 4:
-					fw('\n\t\t\t ')
+				if i == 12:
+					fw('\n')
 					i = 0
-				fw(',%.6f,%.6f,%.6f'% v[:])
+				if normscount >= len(me_normals):
+					fw('%.6f,%.6f,%.6f'% v[:])
+				else:
+					fw('%.6f,%.6f,%.6f,'% v[:])
 			i += 1
-		fw('\n\t\t}')
+			normscount += 1
+		fw('\n\t\t\t}\n\t\t}')
 		
 		if export_tangents:
-		
 			fw('''
 		LayerElementBinormal: 0 {
 			Version: 101
 			Name: ""
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "Direct"
-			Binormals: ''')
-			
+			Binormals: *%i {
+				a: ''' % (len(me_binormals) * 3))
 			i = -1
+			normscount = 1
 			for v in me_binormals:
 				if i == -1:
-					fw('%.6f,%.6f,%.6f' % v[:])
+					fw('%.6f,%.6f,%.6f,' % v[:])
 					i = 0
 				else:
-					if i == 4:
-						fw('\n\t\t\t ')
+					if i == 12:
+						fw('\n')
 						i = 0
-					fw(',%.6f,%.6f,%.6f'% v[:])
+					if normscount >= len(me_binormals):
+						fw('%.6f,%.6f,%.6f'% v[:])
+					else:
+						fw('%.6f,%.6f,%.6f,'% v[:])
 				i += 1
-			fw('\n\t\t}')
+				normscount += 1
+			fw('\n\t\t\t}\n\t\t}')
 			
 			fw('''
 		LayerElementTangent: 0 {
@@ -1824,20 +2060,25 @@ References:  {
 			Name: ""
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "Direct"
-			Tangents: ''')
-			
+			Tangents: *%i {
+				a: ''' % (len(me_tangents) * 3))
 			i = -1
+			normscount = 1
 			for v in me_tangents:
 				if i == -1:
-					fw('%.6f,%.6f,%.6f' % v[:])
+					fw('%.6f,%.6f,%.6f,' % v[:])
 					i = 0
 				else:
-					if i == 4:
-						fw('\n\t\t\t ')
+					if i == 12:
+						fw('\n')
 						i = 0
-					fw(',%.6f,%.6f,%.6f'% v[:])
+					if normscount >= len(me_tangents):
+						fw('%.6f,%.6f,%.6f'% v[:])
+					else:
+						fw('%.6f,%.6f,%.6f,'% v[:])
 				i += 1
-			fw('\n\t\t}')
+				normscount += 1
+			fw('\n\t\t\t}\n\t\t}')
 		
 		###########################################
 		# Write Smoothing Groups
@@ -1849,45 +2090,54 @@ References:  {
 			Name: ""
 			MappingInformationType: "ByPolygon"
 			ReferenceInformationType: "Direct"
-			Smoothing: ''')
-
+			Smoothing: *%i {
+				a: ''' % len(me_faces))
 			i = -1
+			totalfcount = 1
 			for f in me_faces:
 				if i == -1:
-					fw('%i' % f.use_smooth)
+					fw('%i,' % f.use_smooth)
 					i = 0
 				else:
-					if i == 54:
-						fw('\n\t\t\t ')
+					if i == 108:
+						fw('\n')
 						i = 0
-					fw(',%i' % f.use_smooth)
+					if totalfcount >= len(me_faces):
+						fw('%i' % f.use_smooth)
+					else:
+						fw('%i,' % f.use_smooth)
 				i += 1
+				totalfcount += 1
 
-			fw('\n\t\t}')
+			fw('\n\t\t\t}\n\t\t}')
 		# Write Edge Smoothing
 		elif mesh_smooth_type == 'EDGE' and not is_collision:
-			
 			fw('''
 		LayerElementSmoothing: 0 {
 			Version: 101
 			Name: ""
 			MappingInformationType: "ByEdge"
 			ReferenceInformationType: "Direct"
-			Smoothing: ''')
+			Smoothing: *%i {
+				a: ''' % len(me_edges))
 
 			i = -1
+			totalfcount = 1
 			for ed in me_edges:
 				if i == -1:
-					fw('%i' % (ed.use_edge_sharp))
+					fw('%i,' % (ed.use_edge_sharp))
 					i = 0
 				else:
-					if i == 54:
-						fw('\n\t\t\t ')
+					if i == 108:
+						fw('\n')
 						i = 0
-					fw(',%i' % ed.use_edge_sharp)
+					if totalfcount >= len(me_faces):
+						fw('%i' % ed.use_edge_sharp)
+					else:
+						fw('%i,' % ed.use_edge_sharp)
 				i += 1
-
-			fw('\n\t\t}')
+				totalfcount += 1
+			fw('\n\t\t\t}\n\t\t}')
 		
 		# Write No Smoothing
 		elif mesh_smooth_type == 'OFF' and not is_collision:
@@ -1895,21 +2145,26 @@ References:  {
 		else:
 			raise Exception("invalid mesh_smooth_type: %r" % mesh_smooth_type)
 		
-		#####################################################
 		
-		# Write VertexColor Layers
-		# note, no programs seem to use this info :/
+		#####################################################
+		# VertexColor Layers
 		collayers = []
 		if len(me.tessface_vertex_colors):
 			collayers = me.tessface_vertex_colors
 			for colindex, collayer in enumerate(collayers):
+				totalcolcount = 0
+				
+				for fi, cf in enumerate(collayer.data):
+					totalcolcount += len(me_faces[fi].vertices)
+				
 				fw('\n\t\tLayerElementColor: %i {' % colindex)
 				fw('\n\t\t\tVersion: 101')
 				fw('\n\t\t\tName: "%s"' % collayer.name)
 				fw('''
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
-			Colors: ''')
+			Colors: *%i {
+				a: ''' % (totalcolcount * 4))
 				
 				i = -1
 				ii = 0  # Count how many Colors we write
@@ -1932,7 +2187,8 @@ References:  {
 						i += 1
 						ii += 1  # One more Color
 				
-				fw('\n\t\t\tColorIndex: ')
+				fw('\n\t\t\t}\n\t\t\tColorIndex: *%i {' % totalcolcount)
+				fw('\n\t\t\t\ta: ')
 				i = -1
 				for j in range(ii):
 					if i == -1:
@@ -1944,21 +2200,29 @@ References:  {
 							i = 0
 						fw(',%i' % j)
 					i += 1
-				fw('\n\t\t}')
+				fw('\n\t\t\t}\n\t\t}')
 		
-		# Write UV and texture layers.
+		# Write UV layers.
 		uvlayers = []
 		if do_uvs:
+			curuv = 0
 			uvlayers = me.tessface_uv_textures
 			for uvindex, uvlayer in enumerate(me.tessface_uv_textures):
-				fw('\n\t\tLayerElementUV: %i {' % uvindex)
-				fw('\n\t\t\tVersion: 101')
-				fw('\n\t\t\tName: "%s"' % uvlayer.name)
+				uvscount = 0
+				for uf in uvlayer.data:
+					uvscount += len(uf.uv)
+				
+				fw('''
+		LayerElementUV: %i {''' % curuv)
+				fw('''
+			Version: 101
+			Name: "%s"''' % uvlayer.name)
 				fw('''
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
-			UV: ''')
-				
+			UV: *%i {
+				a: ''' % (uvscount * 2))
+				curuv += 1
 				i = -1
 				ii = 0  # Count how many UVs we write
 				
@@ -1966,84 +2230,43 @@ References:  {
 					# workaround, since uf.uv iteration is wrong atm
 					for uv in uf.uv:
 						if i == -1:
-							fw('%.6f,%.6f' % uv[:])
+							fw('%.6f,%.6f,' % uv[:])
 							i = 0
 						else:
-							if i == 7:
-								fw('\n\t\t\t ')
+							if i == 24:
+								fw('\n')
 								i = 0
-							fw(',%.6f,%.6f' % uv[:])
+							if ii >= (uvscount - 1):
+								fw('%.6f,%.6f' % uv[:])
+							else:
+								fw('%.6f,%.6f,' % uv[:])
 						i += 1
 						ii += 1  # One more UV
+				fw('\n\t\t\t}')
+				fw('''
+			UVIndex: *%i {
+				a: ''' % uvscount)
 				
-				fw('\n\t\t\tUVIndex: ')
 				i = -1
+				tempuvcount = 1
 				for j in range(ii):
 					if i == -1:
-						fw('%i' % j)
+						fw('%i,' % j)
 						i = 0
 					else:
 						if i == 55:
-							fw('\n\t\t\t\t')
+							fw('\n')
 							i = 0
-						fw(',%i' % j)
+						if tempuvcount >= uvscount:
+							fw('%i' % j)
+						else:
+							fw('%i,' % j)
 					i += 1
+					tempuvcount += 1
 				
-				fw('\n\t\t}')
+				fw('\n\t\t\t}\n\t\t}')
 				
-				if do_textures:
-					fw('\n\t\tLayerElementTexture: %i {' % uvindex)
-					fw('\n\t\t\tVersion: 101')
-					fw('\n\t\t\tName: "%s"' % uvlayer.name)
-					
-					if len(my_mesh.blenTextures) == 1:
-						fw('\n\t\t\tMappingInformationType: "AllSame"')
-					else:
-						fw('\n\t\t\tMappingInformationType: "ByPolygon"')
-					
-					fw('\n\t\t\tReferenceInformationType: "IndexToDirect"')
-					fw('\n\t\t\tBlendMode: "Translucent"')
-					fw('\n\t\t\tTextureAlpha: 1')
-					fw('\n\t\t\tTextureId: ')
-					
-					if len(my_mesh.blenTextures) == 1:
-						fw('0')
-					else:
-						texture_mapping_local = {None: -1}
-						
-						i = 0  # 1 for dummy
-						for tex in my_mesh.blenTextures:
-							if tex:  # None is set above
-								texture_mapping_local[tex] = i
-								i += 1
-						
-						i = -1
-						for f in uvlayer.data:
-							img_key = f.image
-							
-							if i == -1:
-								i = 0
-								fw('%s' % texture_mapping_local[img_key])
-							else:
-								if i == 55:
-									fw('\n			 ')
-									i = 0
-								
-								fw(',%s' % texture_mapping_local[img_key])
-							i += 1
-						
-				else:
-					fw('''
-		LayerElementTexture: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "NoMappingInformation"
-			ReferenceInformationType: "IndexToDirect"
-			BlendMode: "Translucent"
-			TextureAlpha: 1
-			TextureId: ''')
-				fw('\n\t\t}')
-		
+
 		# Done with UV/textures.
 		if do_materials:
 			fw('\n\t\tLayerElementMaterial: 0 {')
@@ -2056,11 +2279,12 @@ References:  {
 				fw('\n\t\t\tMappingInformationType: "ByPolygon"')
 
 			fw('\n\t\t\tReferenceInformationType: "IndexToDirect"')
-			fw('\n\t\t\tMaterials: ')
-
+			
 			if len(my_mesh.blenMaterials) == 1:
-				fw('0')
+				fw('\n\t\t\tMaterials: *1 {\n\t\t\t\ta: 0')
 			else:
+				fw('\n\t\t\tMaterials: *%i {' % len(me_faces))
+				fw('\n\t\t\t\ta: ')
 				# Build a material mapping for this
 				material_mapping_local = {}  # local-mat & tex : global index.
 
@@ -2097,7 +2321,7 @@ References:  {
 						fw(',%s' % material_mapping_local[mat, tex])
 					i += 1
 
-			fw('\n\t\t}')
+			fw('\n\t\t\t}\n\t\t}')
 
 		fw('''
 		Layer: 0 {
@@ -2134,14 +2358,6 @@ References:  {
 				TypedIndex: 0
 			}''')
 
-		# Always write this
-		if do_textures:
-			fw('''
-			LayerElement:  {
-				Type: "LayerElementTexture"
-				TypedIndex: 0
-			}''')
-
 		if me.tessface_vertex_colors:
 			fw('''
 			LayerElement:  {
@@ -2157,100 +2373,35 @@ References:  {
 			}''')
 
 		fw('\n\t\t}')
-
-		if len(uvlayers) > 1:
-			for i in range(1, len(uvlayers)):
-
-				fw('\n\t\tLayer: %i {' % i)
+		
+		# add more layers for additional uvs + colors
+		templayercount = len(uvlayers)
+		if len(collayers) > templayercount:
+			templayercount = len(collayers)
+		
+		if (templayercount > 1):
+			for l in range(1, templayercount):
+				fw('\n\t\tLayer: %i {' % l)
 				fw('\n\t\t\tVersion: 100')
-
-				fw('''
-			LayerElement:  {
-				Type: "LayerElementUV"''')
-
-				fw('\n\t\t\t\tTypedIndex: %i' % i)
-				fw('\n\t\t\t}')
-
-				if do_textures:
-
+				
+				if len(uvlayers) > l:
 					fw('''
 			LayerElement:  {
-				Type: "LayerElementTexture"''')
-
-					fw('\n\t\t\t\tTypedIndex: %i' % i)
+				Type: "LayerElementUV"''')
+					fw('\n\t\t\t\tTypedIndex: %i' % l)
 					fw('\n\t\t\t}')
-
-				fw('\n\t\t}')
-
-		if len(collayers) > 1:
-			# Take into account any UV layers
-			layer_offset = 0
-			if uvlayers:
-				layer_offset = len(uvlayers) - 1
-
-			for i in range(layer_offset, len(collayers) + layer_offset):
-				fw('\n\t\tLayer: %i {' % i)
-				fw('\n\t\t\tVersion: 100')
-
-				fw('''
+				
+				if len(collayers) > l:
+					fw('''
 			LayerElement:  {
 				Type: "LayerElementColor"''')
-
-				fw('\n\t\t\t\tTypedIndex: %i' % i)
-				fw('\n\t\t\t}')
-				fw('\n\t\t}')
-
-		if do_shapekeys:
-			key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
-			for kb in key_blocks[1:]:
-
-				fw('\n\t\tShape: "%s" {' % kb.name)
-				fw('\n\t\t\tIndexes: ')
-
-				basis_verts = key_blocks[0].data
-				range_verts = []
-				delta_verts = []
-				i = -1
-				for j, kv in enumerate(kb.data):
-					delta = kv.co - basis_verts[j].co
-					if delta.length > 0.000001:
-						if i == -1:
-							fw('%d' % j)
-						else:
-							if i == 7:
-								fw('\n\t\t\t')
-								i = 0
-							fw(',%d' % j)
-						delta_verts.append(delta[:])
-						i += 1
-
-				fw('\n\t\t\tVertices: ')
-				i = -1
-				for dv in delta_verts:
-					if i == -1:
-						fw("%.6f,%.6f,%.6f" % dv)
-					else:
-						if i == 4:
-							fw('\n\t\t\t')
-							i = 0
-						fw(",%.6f,%.6f,%.6f" % dv)
-					i += 1
-
-				# all zero, why? - campbell
-				fw('\n\t\t\tNormals: ')
-				for j in range(len(delta_verts)):
-					if i == -1:
-						fw("0,0,0")
-					else:
-						if i == 4:
-							fw('\n\t\t\t')
-							i = 0
-						fw(",0,0,0")
-					i += 1
-				fw('\n\t\t}')
+					fw('\n\t\t\t\tTypedIndex: %i' % l)
+					fw('\n\t\t\t}')
 				
-		# not completely sure about this, but it's in the converter output:
-		fw('\n\t\tNodeAttributeName: "Geometry::%s' % (str(meshobject.name) + '_ncl1_1"'))
+				fw('\n\t\t}')
+		
+		
+		
 		fw('\n\t}')
 
 	def write_group(name):
@@ -2319,13 +2470,7 @@ References:  {
 
 		for ob, mtx in obs:
 			tmp_ob_type = ob.type
-			if tmp_ob_type == 'CAMERA':
-				if 'CAMERA' in object_types:
-					ob_cameras.append(my_object_generic(ob, mtx))
-			elif tmp_ob_type == 'LAMP':
-				if 'LAMP' in object_types:
-					ob_lights.append(my_object_generic(ob, mtx))
-			elif tmp_ob_type == 'ARMATURE':
+			if tmp_ob_type == 'ARMATURE':
 				if 'ARMATURE' in object_types:
 					# TODO - armatures dont work in dupligroups!
 					if ob not in ob_arms:
@@ -2360,15 +2505,6 @@ References:  {
 						me.update(calc_tessface=True)
 						mats = me.materials
 
-# 						# Support object colors
-# 						tmp_colbits = ob.colbits
-# 						if tmp_colbits:
-# 							tmp_ob_mats = ob.getMaterials(1) # 1 so we get None's too.
-# 							for i in xrange(16):
-# 								if tmp_colbits & (1<<i):
-# 									mats[i] = tmp_ob_mats[i]
-# 							del tmp_ob_mats
-# 						del tmp_colbits
 
 				if me:
 # 					# This WILL modify meshes in blender if use_mesh_modifiers is disabled.
@@ -2380,6 +2516,7 @@ References:  {
 					texture_mapping_local = {}
 					material_mapping_local = {}
 					if me.tessface_uv_textures:
+						matscheck = []
 						for uvlayer in me.tessface_uv_textures:
 							for f, uf in zip(me.tessfaces, uvlayer.data):
 								tex = uf.image
@@ -2389,10 +2526,13 @@ References:  {
 									mat = mats[f.material_index]
 								except:
 									mat = None
-
-								materials[mat, tex] = material_mapping_local[mat, tex] = None  # should use sets, wait for blender 2.5
+								
+								if mat not in matscheck:
+									matscheck.append(mat)
+									materials[mat, tex] = material_mapping_local[mat, tex] = None  # should use sets, wait for blender 2.5
 
 					else:
+						
 						for mat in mats:
 							# 2.44 use mat.lib too for uniqueness
 							materials[mat, None] = material_mapping_local[mat, None] = None
@@ -2577,7 +2717,9 @@ References:  {
 
 	# == WRITE OBJECTS TO THE FILE ==
 	# == From now on we are building the FBX file from the information collected above (JCB)
-
+	
+	foundmats = []
+	
 	materials = [(sane_matname(mat_tex_pair), mat_tex_pair) for mat_tex_pair in materials.keys()]
 	textures = [(sane_texname(tex), tex) for tex in textures.keys()  if tex]
 	materials.sort(key=lambda m: m[0])  # sort by name
@@ -2598,65 +2740,6 @@ References:  {
 	except AssertionError:
 		import traceback
 		traceback.print_exc()
-
-	fw('''
-
-; Object definitions
-;------------------------------------------------------------------
-
-Definitions:  {
-	Version: 100
-	Count: %i''' % (
-		1 + camera_count +
-		len(ob_meshes) +
-		len(ob_lights) +
-		len(ob_cameras) +
-		len(ob_null) +
-		len(ob_bones) +
-		bone_deformer_count +
-		len(materials) +
-		(len(textures) * 2) +
-		3)) # add 1 each for global settings, sceneinfo, pose
-	
-	del bone_deformer_count
-	
-	fw('''
-	ObjectType: "Model" {
-		Count: %i
-	}''' % (
-		camera_count +
-		len(ob_meshes) +
-		len(ob_lights) +
-		len(ob_cameras) +
-		len(ob_null) +
-		len(ob_bones)))
-	
-	if materials:
-		fw('''
-	ObjectType: "Material" {
-		Count: %i
-	}''' % len(materials))
-	
-	if textures:
-		fw('''
-	ObjectType: "Texture" {
-		Count: %i
-	}''' % len(textures))  # add 1 for an empty tex
-	
-		fw('''
-	ObjectType: "Video" {
-		Count: %i
-	}''' % (len(textures) * 2))  # add 1 for an empty tex
-	
-	fw('''
-	ObjectType: "SceneInfo" {
-		Count: 1
-	}''')
-	
-	fw('''
-	ObjectType: "GlobalSettings" {
-		Count: 1
-	}''')
 	
 	tmp = 0
 	# Add deformer nodes
@@ -2667,6 +2750,251 @@ Definitions:  {
 	# Add subdeformers
 	for my_bone in ob_bones:
 		tmp += len(my_bone.blenMeshes)
+	
+	blendshapecount = 0
+	for my_mesh in ob_meshes:
+		me = my_mesh.blenData
+		do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
+						my_mesh.blenObject.data.shape_keys and
+						len(my_mesh.blenObject.data.vertices) == len(me.vertices))
+		if do_shapekeys:
+			key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
+			for kb in key_blocks[1:]:
+				blendshapecount += 1
+	
+	fw('''
+
+; Object definitions
+;------------------------------------------------------------------
+
+Definitions:  {
+	Version: 100
+	Count: %i''' % (
+		len(ob_meshes) * 2 +
+		blendshapecount +
+		len(ob_bones) * 2 +
+		len(materials) +
+		len(textures) * 3 +
+		tmp +
+		2)) # add 1 each for global config, pose
+	
+	del bone_deformer_count
+	
+	# global config
+	fw('''
+	ObjectType: "GlobalSettings" {
+		Count: 1
+	}''')
+	
+	# model config
+	# mesh object and bone translation data
+	fw('''
+	ObjectType: "Model" {
+		Count: %i''' % (
+		len(ob_meshes) +
+		len(ob_bones))) 
+	fw('''
+		PropertyTemplate: "FbxNode" {
+			Properties70:  {
+				P: "QuaternionInterpolate", "enum", "", "",0
+				P: "RotationOffset", "Vector3D", "Vector", "",0,0,0
+				P: "RotationPivot", "Vector3D", "Vector", "",0,0,0
+				P: "ScalingOffset", "Vector3D", "Vector", "",0,0,0
+				P: "ScalingPivot", "Vector3D", "Vector", "",0,0,0
+				P: "TranslationActive", "bool", "", "",0
+				P: "TranslationMin", "Vector3D", "Vector", "",0,0,0
+				P: "TranslationMax", "Vector3D", "Vector", "",0,0,0
+				P: "TranslationMinX", "bool", "", "",0
+				P: "TranslationMinY", "bool", "", "",0
+				P: "TranslationMinZ", "bool", "", "",0
+				P: "TranslationMaxX", "bool", "", "",0
+				P: "TranslationMaxY", "bool", "", "",0
+				P: "TranslationMaxZ", "bool", "", "",0
+				P: "RotationOrder", "enum", "", "",0
+				P: "RotationSpaceForLimitOnly", "bool", "", "",0
+				P: "RotationStiffnessX", "double", "Number", "",0
+				P: "RotationStiffnessY", "double", "Number", "",0
+				P: "RotationStiffnessZ", "double", "Number", "",0
+				P: "AxisLen", "double", "Number", "",10
+				P: "PreRotation", "Vector3D", "Vector", "",0,0,0
+				P: "PostRotation", "Vector3D", "Vector", "",0,0,0
+				P: "RotationActive", "bool", "", "",0
+				P: "RotationMin", "Vector3D", "Vector", "",0,0,0
+				P: "RotationMax", "Vector3D", "Vector", "",0,0,0
+				P: "RotationMinX", "bool", "", "",0
+				P: "RotationMinY", "bool", "", "",0
+				P: "RotationMinZ", "bool", "", "",0
+				P: "RotationMaxX", "bool", "", "",0
+				P: "RotationMaxY", "bool", "", "",0
+				P: "RotationMaxZ", "bool", "", "",0
+				P: "InheritType", "enum", "", "",0
+				P: "ScalingActive", "bool", "", "",0
+				P: "ScalingMin", "Vector3D", "Vector", "",0,0,0
+				P: "ScalingMax", "Vector3D", "Vector", "",1,1,1
+				P: "ScalingMinX", "bool", "", "",0
+				P: "ScalingMinY", "bool", "", "",0
+				P: "ScalingMinZ", "bool", "", "",0
+				P: "ScalingMaxX", "bool", "", "",0
+				P: "ScalingMaxY", "bool", "", "",0
+				P: "ScalingMaxZ", "bool", "", "",0
+				P: "GeometricTranslation", "Vector3D", "Vector", "",0,0,0
+				P: "GeometricRotation", "Vector3D", "Vector", "",0,0,0
+				P: "GeometricScaling", "Vector3D", "Vector", "",1,1,1
+				P: "MinDampRangeX", "double", "Number", "",0
+				P: "MinDampRangeY", "double", "Number", "",0
+				P: "MinDampRangeZ", "double", "Number", "",0
+				P: "MaxDampRangeX", "double", "Number", "",0
+				P: "MaxDampRangeY", "double", "Number", "",0
+				P: "MaxDampRangeZ", "double", "Number", "",0
+				P: "MinDampStrengthX", "double", "Number", "",0
+				P: "MinDampStrengthY", "double", "Number", "",0
+				P: "MinDampStrengthZ", "double", "Number", "",0
+				P: "MaxDampStrengthX", "double", "Number", "",0
+				P: "MaxDampStrengthY", "double", "Number", "",0
+				P: "MaxDampStrengthZ", "double", "Number", "",0
+				P: "PreferedAngleX", "double", "Number", "",0
+				P: "PreferedAngleY", "double", "Number", "",0
+				P: "PreferedAngleZ", "double", "Number", "",0
+				P: "LookAtProperty", "object", "", ""
+				P: "UpVectorProperty", "object", "", ""
+				P: "Show", "bool", "", "",1
+				P: "NegativePercentShapeSupport", "bool", "", "",1
+				P: "DefaultAttributeIndex", "int", "Integer", "",-1
+				P: "Freeze", "bool", "", "",0
+				P: "LODBox", "bool", "", "",0
+				P: "Lcl Translation", "Lcl Translation", "", "A",0,0,0
+				P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+				P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+				P: "Visibility", "Visibility", "", "A",1
+				P: "Visibility Inheritance", "Visibility Inheritance", "", "",1
+			}
+		}
+	}''')
+	
+	# Geometry config:
+	# - mesh data
+	fw('''
+	ObjectType: "Geometry" {
+		Count: %i''' % len(ob_meshes))
+	fw('''
+		PropertyTemplate: "FbxMesh" {
+			Properties70:  {
+				P: "Color", "ColorRGB", "Color", "",0.8,0.8,0.8
+				P: "BBoxMin", "Vector3D", "Vector", "",0,0,0
+				P: "BBoxMax", "Vector3D", "Vector", "",0,0,0
+				P: "Primary Visibility", "bool", "", "",1
+				P: "Casts Shadows", "bool", "", "",1
+				P: "Receive Shadows", "bool", "", "",1
+			}
+		}
+	}''')
+	
+	# NodeAttribute config:
+	# - bone attributes
+	fw('''
+	ObjectType: "NodeAttribute" {
+		Count: %i''' % len(ob_bones))
+	
+	fw('''
+		PropertyTemplate: "FbxSkeleton" {
+			Properties70:  {
+				P: "Color", "ColorRGB", "Color", "",0.8,0.8,0.8
+				P: "Size", "double", "Number", "",100
+				P: "LimbLength", "double", "Number", "H",1
+			}
+		}
+	}''')
+	
+	# material config
+	# - switched default to Phong for consistency with UE
+	# -probably won't make a difference since attributes are changed on export
+	if materials:
+		fw('''
+	ObjectType: "Material" {
+		Count: %i''' % len(materials))
+		
+		fw('''
+		PropertyTemplate: "FbxSurfacePhong" {
+			Properties70:  {
+				P: "ShadingModel", "KString", "", "", "Phong"
+				P: "MultiLayer", "bool", "", "",0
+				P: "EmissiveColor", "Color", "", "A",0,0,0
+				P: "EmissiveFactor", "Number", "", "A",1
+				P: "AmbientColor", "Color", "", "A",0.2,0.2,0.2
+				P: "AmbientFactor", "Number", "", "A",1
+				P: "DiffuseColor", "Color", "", "A",0.8,0.8,0.8
+				P: "DiffuseFactor", "Number", "", "A",1
+				P: "Bump", "Vector3D", "Vector", "",0,0,0
+				P: "NormalMap", "Vector3D", "Vector", "",0,0,0
+				P: "BumpFactor", "double", "Number", "",1
+				P: "TransparentColor", "Color", "", "A",0,0,0
+				P: "TransparencyFactor", "Number", "", "A",0
+				P: "DisplacementColor", "ColorRGB", "Color", "",0,0,0
+				P: "DisplacementFactor", "double", "Number", "",1
+				P: "VectorDisplacementColor", "ColorRGB", "Color", "",0,0,0
+				P: "VectorDisplacementFactor", "double", "Number", "",1
+			}
+		}
+	}''')
+	
+	if textures:
+		# texture config
+		fw('''
+	ObjectType: "Texture" {
+		Count: %i''' % len(textures))
+		
+		fw('''
+		PropertyTemplate: "FbxFileTexture" {
+			Properties70:  {
+				P: "TextureTypeUse", "enum", "", "",0
+				P: "Texture alpha", "Number", "", "A",1
+				P: "CurrentMappingType", "enum", "", "",0
+				P: "WrapModeU", "enum", "", "",0
+				P: "WrapModeV", "enum", "", "",0
+				P: "UVSwap", "bool", "", "",0
+				P: "PremultiplyAlpha", "bool", "", "",1
+				P: "Translation", "Vector", "", "A",0,0,0
+				P: "Rotation", "Vector", "", "A",0,0,0
+				P: "Scaling", "Vector", "", "A",1,1,1
+				P: "TextureRotationPivot", "Vector3D", "Vector", "",0,0,0
+				P: "TextureScalingPivot", "Vector3D", "Vector", "",0,0,0
+				P: "CurrentTextureBlendMode", "enum", "", "",1
+				P: "UVSet", "KString", "", "", "default"
+				P: "UseMaterial", "bool", "", "",0
+				P: "UseMipMap", "bool", "", "",0
+			}
+		}
+	}''')
+		
+		# write video config
+		fw('''
+	ObjectType: "Video" {
+		Count: %i''' % (len(textures) * 2))
+		
+		fw('''
+		PropertyTemplate: "FbxVideo" {
+			Properties70:  {
+				P: "ImageSequence", "bool", "", "",0
+				P: "ImageSequenceOffset", "int", "Integer", "",0
+				P: "FrameRate", "double", "Number", "",0
+				P: "LastFrame", "int", "Integer", "",0
+				P: "Width", "int", "Integer", "",0
+				P: "Height", "int", "Integer", "",0
+				P: "Path", "KString", "XRefUrl", "", ""
+				P: "StartFrame", "int", "Integer", "",0
+				P: "StopFrame", "int", "Integer", "",0
+				P: "PlaySpeed", "double", "Number", "",0
+				P: "Offset", "KTime", "Time", "",0
+				P: "InterlaceMode", "enum", "", "",0
+				P: "FreeRunning", "bool", "", "",0
+				P: "Loop", "bool", "", "",0
+				P: "AccessMode", "enum", "", "",0
+			}
+		}
+	}''')
+	
+	
+	
 	
 	if tmp:
 		fw('''
@@ -2681,14 +3009,7 @@ Definitions:  {
 		Count: 1
 	}''')
 	
-	if groups:
-		fw('''
-	ObjectType: "GroupSelection" {
-		Count: %i
-	}''' % len(groups))
-	
-	fw('''
-}''')
+	fw('\n}\n')
 	
 	fw('''
 
@@ -2697,9 +3018,9 @@ Definitions:  {
 
 Objects:  {''')
 
-	if 'CAMERA' in object_types:
-		# To comply with other FBX FILES
-		write_camera_switch()
+	#if 'CAMERA' in object_types:
+	#	# To comply with other FBX FILES
+	#	write_camera_switch()
 
 	for my_null in ob_null:
 		write_null(my_null)
@@ -2708,100 +3029,113 @@ Objects:  {''')
 	# Note, 2.58 and previous wrote these as normal empties and it worked mostly (except for XNA)
 	#for my_arm in ob_arms:
 	#	write_null(my_arm, fbxType="Limb", fbxTypeFlags="Skeleton")
+	
+	# addon scope is mesh only, no need to export cameras + lights
+	
+	#for my_cam in ob_cameras:
+	#	write_camera(my_cam)
 
-	for my_cam in ob_cameras:
-		write_camera(my_cam)
-
-	for my_light in ob_lights:
-		write_light(my_light)
-
+	#for my_light in ob_lights:
+	#	write_light(my_light)
+	
+	
+	# write geometry
 	for my_mesh in ob_meshes:
 		write_mesh(my_mesh)
-
-	#for bonename, bone, obname, me, armob in ob_bones:
+	
+	# write blend shapes
+	for my_mesh in ob_meshes:
+		me = my_mesh.blenData
+		do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
+						my_mesh.blenObject.data.shape_keys and
+						len(my_mesh.blenObject.data.vertices) == len(me.vertices))
+		if do_shapekeys:
+			write_blend_shape_geometry(my_mesh)
+	
+	# bone NodeAttributes:
+	bindex = 1
 	for my_bone in ob_bones:
-		write_bone(my_bone)
+		write_bone_node(my_bone, bindex)
+		bindex += 1
 	
-	# SceneInfo:
-	fw('''
-	SceneInfo: "SceneInfo::GlobalInfo", "UserData" {
-		Type: "UserData"
-		Version: 100
-		MetaData:  {
-			Version: 100
-			Title: ""
-			Subject: ""
-			Author: ""
-			Keywords: ""
-			Revision: ""
-			Comment: ""
-		}
-		Properties60:  {
-			''')
+	# new model attributes
+	for my_mesh in ob_meshes:
+		write_modelattributes(my_mesh)
 	
-	fw('Property: "DocumentUrl", "KString", "", "%s"\n' % filepath)
-	fw('\t\t\t\n')
-	fw('\t\t\tProperty: "SrcDocumentUrl", "KString", "", "%s"\n' % filepath)
-	
-	fw('''
-			Property: "Original", "Compound", ""
-			Property: "Original|ApplicationVendor", "KString", "", ""
-			Property: "Original|ApplicationName", "KString", "", "Blender"
-			Property: "Original|ApplicationVersion", "KString", "", "2.73"
-			Property: "Original|DateTime_GMT", "DateTime", "", ""
-			Property: "Original|FileName", "KString", "", ""
-			Property: "LastSaved", "Compound", ""
-			Property: "LastSaved|ApplicationVendor", "KString", "", ""
-			Property: "LastSaved|ApplicationName", "KString", "", "Blender"
-			Property: "LastSaved|ApplicationVersion", "KString", "", "2.73"
-			Property: "LastSaved|DateTime_GMT", "DateTime", "", ""
-		}
-	}''')
-	
-	if 'CAMERA' in object_types:
-		write_camera_default()
-
-	for matname, (mat, tex) in materials:
-		write_material(matname, mat)  # We only need to have a material per image pair, but no need to write any image info into the material (dumb fbx standard)
-
-	# each texture uses a video, odd
-	for texname, tex in textures:
-		write_video(texname, tex)
-	i = 0
-	for texname, tex in textures:
-		write_texture(texname, tex, i)
-		i += 1
+	# bone Model/Limbs:
+	bindex = 1
+	for my_bone in ob_bones:
+		write_bone_props(my_bone, bindex)
+		bindex += 1
 	
 	# Write pose is really weird, only needed when an armature and mesh are used together
 	# each by themselves do not need pose data. For now only pose meshes and bones
 
 	# Bind pose is essential for XNA if the 'MESH' is included (JCB)
+	# added root node for 7.3 - still being read as invalid on UE import
+	
 	fw('''
-	Pose: "Pose::BIND_POSES", "BindPose" {
+	Pose: 110000, "Pose::BIND_POSES", "BindPose" {
 		Type: "BindPose"
 		Version: 100
-		Properties60:  {
-		}
-		NbPoseNodes: ''')
-	fw(str(len(pose_items)))
-
-	for fbxName, matrix in pose_items:
+		NbPoseNodes: %i
+		PoseNode:  {''' % (len(pose_items) + 1))
+	# RootNode - not really sure if this is needed
+	fw('''
+			Node: 0
+			Matrix: *16 {
+				a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1
+			} 
+		}''')
+	
+	for fbxName, matrix, tempname in pose_items:
+		tempobj = None
+		isBone = False
+		if tempname in bpy.context.scene.objects:
+			tempobj = bpy.context.scene.objects[tempname]
+		else:
+			for b in ob_bones:
+				if b.fbxName == fbxName:
+					tempobj = b
+					isBone = True
+		
+		tempname = get_fbx_MeshID(tempobj)
+		if isBone:
+			tempname = get_fbx_BoneID(tempobj, ob_bones)
+		
 		fw('\n\t\tPoseNode:  {')
-		fw('\n\t\t\tNode: "Model::%s"' % fbxName)
-		fw('\n\t\t\tMatrix: %s' % mat4x4str(matrix if matrix else Matrix()))
-		fw('\n\t\t}')
-
+		fw('\n\t\t\tNode: %i' % tempname)
+		fw('\n\t\t\tMatrix: *16 {')
+		fw('\n\t\t\t\ta: %s' % mat4x4str(matrix if matrix else Matrix()))
+		fw('\n\t\t\t}\n\t\t}')
 	fw('\n\t}')
 	
+	#if 'CAMERA' in object_types:
+	#	write_camera_default()
+	
+	matcount = 1
+	for matname, (mat, tex) in materials:
+		write_material(matname, mat, matcount)
+		matcount += 1
+
+	# each texture uses a video, odd
+	vidindex = 1
+	for texname, tex in textures:
+		write_video(texname, tex, vidindex)
+		vidindex += 1
+	i = 1
+	for texname, tex in textures:
+		write_texture(texname, tex, i)
+		i += 1
 	
 	# NOTE - c4d and motionbuilder dont need normalized weights, but deep-exploration 5 does and (max?) do.
 
 	# Write armature modifiers
-	# TODO - add another MODEL? - because of this skin definition.
+	deformerid = 800001
 	for my_mesh in ob_meshes:
 		if my_mesh.fbxArm:
-			write_deformer_skin(my_mesh.fbxName)
-
+			write_deformer_skin(my_mesh.fbxName, deformerid)
+			deformerid += 1
 			# Get normalized weights for temorary use
 			if my_mesh.fbxBoneParent:
 				weights = None
@@ -2811,32 +3145,32 @@ Objects:  {''')
 			#for bonename, bone, obname, bone_mesh, armob in ob_bones:
 			for my_bone in ob_bones:
 				if me in iter(my_bone.blenMeshes.values()):
-					write_sub_deformer_skin(my_mesh, my_bone, weights)
-
-
+					write_sub_deformer_skin(my_mesh, my_bone, weights, deformerid)
+				deformerid += 1
+	
+	# Blend shape Deformers
+	for my_mesh in ob_meshes:
+		me = my_mesh.blenData
+		do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
+						my_mesh.blenObject.data.shape_keys and
+						len(my_mesh.blenObject.data.vertices) == len(me.vertices))
+		if do_shapekeys:
+			write_blend_shape_deformer(my_mesh)
+	
+	
+	# groups?
 	for groupname, group in groups:
 		write_group(groupname)
 	
 	# Finish Writing Objects
 	
-	# Write global settings
-	fw('''
-	GlobalSettings:  {
-		Version: 1000
-		Properties60:  {
-			Property: "UpAxis", "int", "",1
-			Property: "UpAxisSign", "int", "",1
-			Property: "FrontAxis", "int", "",2
-			Property: "FrontAxisSign", "int", "",1
-			Property: "CoordAxis", "int", "",0
-			Property: "CoordAxisSign", "int", "",1
-			Property: "UnitScaleFactor", "double", "",1
-		}
-	}
-''')
-	fw('}')
+	fw('\n}')
 
-	# Removed object relations - doesn't appear to be needed
+	# Removed object relations - don't appear to be needed for 7.3
+	
+	
+	#######################################################
+	# Object connections:
 	
 	fw('''
 
@@ -2848,59 +3182,189 @@ Connections:  {''')
 	# NOTE - The FBX SDK does not care about the order but some importers DO!
 	# for instance, defining the material->mesh connection
 	# before the mesh->parent crashes cinema4d
-
+	
+	# Model - Parent/Root
 	for ob_generic in ob_all_typegroups:  # all blender 'Object's we support
 		for my_ob in ob_generic:
 			# for deformed meshes, don't have any parents or they can get twice transformed.
 			# - removed Armature dependency from export and object from file write for root bone fix
 			if my_ob.fbxParent and (not my_ob.fbxArm):
-				fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_ob.fbxName, my_ob.fbxParent.fbxName))
+				fw('\n\t;Model::%s, ' % my_ob.fbxName)
+				fw('Model::%s' % my_ob.fbxParent.fbxName)
+				fw('\n\tC: "OO",%i,' % get_fbx_GeomID(my_ob.blenObject))
+				fw('%i\n\t' % get_fbx_MeshID(my_ob.fbxParent.blenObject))
 			else:
 				if my_ob.fbxName != "Armature":
-					fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % my_ob.fbxName)
-
+					fw('\n\t;Model::%s, Model::RootNode' % my_ob.fbxName)
+					fw('\n\tC: "OO",%i,0\n\t' % get_fbx_MeshID(my_ob.blenObject))
+	
+	# Root bone - RootNode
+	for my_bone in ob_bones:
+		if not my_bone.parent:
+			fw('\n\t;Model::%s, Model::RootNode' % my_bone.fbxName)
+			fw('\n\tC: "OO",%i,0\n\t' % get_fbx_BoneID(my_bone, ob_bones))
+	
+	# Geometry - Model
+	for ob_generic in ob_all_typegroups:  # all blender 'Object's we support
+		for my_ob in ob_generic:
+			if not (my_ob.fbxParent and (not my_ob.fbxArm)):
+				if my_ob.fbxName != "Armature":
+					fw('\n\t;Geometry::%s, ' % my_ob.fbxName)
+					fw('Model::%s' % my_ob.fbxName)
+					fw('\n\tC: "OO",%i,' % get_fbx_GeomID(my_ob.blenObject))
+					fw('%i\n\t' % get_fbx_MeshID(my_ob.blenObject))
+	
+	# Materials
 	if materials:
+		# Material - Model
 		for my_mesh in ob_meshes:
-			# Connect all materials to all objects, not good form but ok for now.
 			for mat, tex in my_mesh.blenMaterials:
 				mat_name = mat.name if mat else None
 				tex_name = tex.name if tex else None
-
-				fw('\n\tConnect: "OO", "Material::%s", "Model::%s"' % (sane_name_mapping_mat[mat_name, tex_name], my_mesh.fbxName))
-
-	if textures:
-		for my_mesh in ob_meshes:
-			if my_mesh.blenTextures:
-				# fw('\n\tConnect: "OO", "Texture::_empty_", "Model::%s"' % my_mesh.fbxName)
-				for tex in my_mesh.blenTextures:
-					if tex:
-						fw('\n\tConnect: "OO", "Texture::%s", "Model::%s"' % (sane_name_mapping_tex[tex.name], my_mesh.fbxName))
-
-		for texname, tex in textures:
-			fw('\n\tConnect: "OO", "Video::%s", "Texture::%s"' % (texname, texname))
+				fw('\n\t;Material::%s, ' % mat_name)
+				fw('Model::%s' % my_mesh.fbxName)
+				fw('\n\tC: "OO",%i,' % get_fbx_MaterialID(mat, materials))
+				fw('%i\n\t' % get_fbx_MeshID(my_mesh.blenObject))
 	
-	# moved for consistency
-	#for bonename, bone, obname, me, armob in ob_bones:
-	for my_bone in ob_bones:
-		# Always parent to armature now
-		if my_bone.parent:
-			fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_bone.fbxName, my_bone.parent.fbxName))
-		else:
-			fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % (my_bone.fbxName))
 	
 	if 'MESH' in object_types:
+		
+		'''
+	;Deformer::, Geometry::SkelCube
+	C: "OO",40351760,40311968
+		'''
+		
+		# Shape -> Geometry
+		for my_mesh in ob_meshes:
+			me = my_mesh.blenData
+			do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
+							my_mesh.blenObject.data.shape_keys and
+							len(my_mesh.blenObject.data.vertices) == len(me.vertices))
+			if do_shapekeys:
+				key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
+				geomid = get_fbx_GeomID(my_mesh.blenObject)
+				fw('\n\t;Deformer::, Geometry::%s' % my_mesh.fbxName)
+				fw('\n\tC: "OO",%i,' % (geomid + 601000))
+				fw('%i\n\t' % geomid)
+			
+		
+		# Skin -> Geometry
 		for my_mesh in ob_meshes:
 			if my_mesh.fbxArm:
-				fw('\n\tConnect: "OO", "Deformer::Skin %s", "Model::%s"' % (my_mesh.fbxName, my_mesh.fbxName))
-
+				fw('\n\t;Deformer::Skin %s, ' % my_mesh.fbxName)
+				fw('Geometry::%s' % my_mesh.fbxName)
+				fw('\n\tC: "OO",%i,' % get_fbx_DeformerID(my_mesh, None, ob_meshes, ob_bones))
+				fw('%i\n\t' % get_fbx_GeomID(my_mesh.blenObject))
+		
+		
+		# ShapeChannel -> Shape
+		'''
+	;SubDeformer::shrink, Deformer::
+	C: "OO",40371312,40351760
+	
+	;SubDeformer::grow, Deformer::
+	C: "OO",40372112,40351760
+		'''
+		for my_mesh in ob_meshes:
+			me = my_mesh.blenData
+			do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
+							my_mesh.blenObject.data.shape_keys and
+							len(my_mesh.blenObject.data.vertices) == len(me.vertices))
+			if do_shapekeys:
+				key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
+				shapeid = get_fbx_GeomID(my_mesh.blenObject)
+				for kb in key_blocks[1:]:
+					shapeid += 1
+					fw('\n\t;SubDeformer::%s, Deformer::' % kb.name)
+					fw('\n\tC: "OO",%i,' % (shapeid +  601000))
+					fw('%i\n\t' % (get_fbx_GeomID(my_mesh.blenObject) + 601000))
+				
+		# ShapeGeometry -> ShapeChannel
+		'''
+	;Geometry::shrink, SubDeformer::shrink
+	C: "OO",40341104,40371312
+	
+	;Geometry::grow, SubDeformer::grow
+	C: "OO",40348480,40372112
+		'''
+		for my_mesh in ob_meshes:
+			me = my_mesh.blenData
+			do_shapekeys = (my_mesh.blenObject.type == 'MESH' and
+							my_mesh.blenObject.data.shape_keys and
+							len(my_mesh.blenObject.data.vertices) == len(me.vertices))
+			if do_shapekeys:
+				key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
+				shapeid = get_fbx_GeomID(my_mesh.blenObject)
+				for kb in key_blocks[1:]:
+					shapeid += 1
+					fw('\n\t;Geometry::%s, ' % kb.name)
+					fw('SubDeformer::%s' % kb.name)
+					fw('\n\tC: "OO",%i,' % (shapeid + 1000))
+					fw('%i\n\t' % (shapeid+ 601000))
+		
+		
+		# Limb -> ParentLimb
+		for my_bone in ob_bones:
+			if my_bone.parent:
+				fw('\n\t;Model::%s, ' % my_bone.fbxName)
+				fw('Model::%s' % my_bone.parent.fbxName)
+				fw('\n\tC: "OO",%i,' % get_fbx_BoneID(my_bone, ob_bones))
+				fw('%i\n\t' % get_fbx_BoneID(my_bone.parent, ob_bones))
+			
+			# NodeAttribute -> Limb
+			fw('\n\t;Attribute::%s, ' % my_bone.fbxName)
+			fw('Model::%s' % my_bone.fbxName)
+			fw('\n\tC: "OO",%i,' % get_fbx_BoneAttributeID(my_bone, ob_bones))
+			fw('%i\n\t' % get_fbx_BoneID(my_bone, ob_bones))
+			
+	
+	
+		# Cluster - Skin
 		for my_bone in ob_bones:
 			for fbxMeshObName in my_bone.blenMeshes:  # .keys()
-				fw('\n\tConnect: "OO", "SubDeformer::Cluster %s %s", "Deformer::Skin %s"' % (fbxMeshObName, my_bone.fbxName, fbxMeshObName))
-
-		# limbs -> deformers
+				tempMesh = fbxMeshObName
+				for tempobj in ob_meshes:
+					if tempobj.fbxArm:
+						if tempobj.fbxName == fbxMeshObName:	
+							tempMesh = tempobj
+				
+				fw('\n\t;SubDeformer::Cluster %s %s, ' % (fbxMeshObName, my_bone.fbxName))
+				fw('Deformer::Skin %s' % fbxMeshObName)
+				fw('\n\tC: "OO",%i,' % get_fbx_DeformerID(my_bone, tempMesh, ob_meshes, ob_bones))
+				fw('%i\n\t' % get_fbx_DeformerID(tempMesh, None, ob_meshes, ob_bones))
+		
+		# Limb - Cluster
 		for my_bone in ob_bones:
 			for fbxMeshObName in my_bone.blenMeshes:  # .keys()
-				fw('\n\tConnect: "OO", "Model::%s", "SubDeformer::Cluster %s %s"' % (my_bone.fbxName, fbxMeshObName, my_bone.fbxName))
+				tempObj = None
+				for obj in ob_meshes:
+					if obj.fbxName == fbxMeshObName:
+						tempObj = obj
+						
+				fw('\n\t;Model::%s, ' % my_bone.fbxName)
+				fw('SubDeformer::Cluster %s %s' % (fbxMeshObName, my_bone.fbxName))
+				fw('\n\tC: "OO",%i,' % get_fbx_BoneID(my_bone, ob_bones))
+				fw('%i\n\t' % get_fbx_DeformerID(my_bone, tempObj, ob_meshes, ob_bones))
+	
+	if materials:
+		if textures:
+			# Texture - Material
+			for my_mesh in ob_meshes:
+				for mat, tex in my_mesh.blenMaterials:
+					mat_name = mat.name if mat else None
+					tex_name = tex.name if tex else None
+					fw('\n\t;Texture::%s, ' % tex_name)
+					fw('Material::%s' % mat_name)
+					fw('\n\tC: "OO",%i,' % get_fbx_TextureID(tex, textures))
+					fw('%i\n\t' % get_fbx_MaterialID(mat, materials))
+	
+	# Video - Texture
+	if textures:
+		for texname, tex in textures:
+			fw('\n\t;Video::%s, ' % tex.name)
+			fw('Texture::%s' % tex.name)
+			fw('\n\tC: "OO",%i,' % get_fbx_VideoID(tex, textures))
+			fw('%i\n\t' % get_fbx_TextureID(tex, textures))
 	
 	# groups
 	if groups:
@@ -2910,7 +3374,12 @@ Connections:  {''')
 					fw('\n\tConnect: "OO", "Model::%s", "GroupSelection::%s"' % (ob_base.fbxName, fbxGroupName))
 
 	fw('\n}')
-
+	
+	
+	#######################################################
+	# Takes/Animations
+	
+	
 	# Needed for scene footer as well as animation
 	render = scene.render
 
@@ -3228,37 +3697,8 @@ Takes:  {''')
 		has_mist = mist_intense = mist_start = mist_end = 0
 		world_hor = 0, 0, 0
 
-	fw('\n;Version 5 settings')
-	fw('\n;------------------------------------------------------------------')
 	fw('\n')
-	fw('\nVersion5:  {')
-	fw('\n\tAmbientRenderSettings:  {')
-	fw('\n\t\tVersion: 101')
-	fw('\n\t\tAmbientLightColor: %.1f,%.1f,%.1f,0' % tuple(world_amb))
-	fw('\n\t}')
-	fw('\n\tFogOptions:  {')
-	fw('\n\t\tFogEnable: %i' % has_mist)
-	fw('\n\t\tFogMode: 0')
-	fw('\n\t\tFogDensity: %.3f' % mist_intense)
-	fw('\n\t\tFogStart: %.3f' % mist_start)
-	fw('\n\t\tFogEnd: %.3f' % mist_end)
-	fw('\n\t\tFogColor: %.1f,%.1f,%.1f,1' % tuple(world_hor))
-	fw('\n\t}')
-	fw('\n\tSettings:  {')
-	fw('\n\t\tFrameRate: "%i"' % int(fps))
-	fw('\n\t\tTimeFormat: 1')
-	fw('\n\t\tSnapOnFrames: 0')
-	fw('\n\t\tReferenceTimeIndex: -1')
-	fw('\n\t\tTimeLineStartTime: %i' % fbx_time(start - 1))
-	fw('\n\t\tTimeLineStopTime: %i' % fbx_time(end - 1))
-	fw('\n\t}')
-	fw('\n\tRendererSetting:  {')
-	fw('\n\t\tDefaultCamera: "Producer Perspective"')
-	fw('\n\t\tDefaultViewingMode: 0')
-	fw('\n\t}')
-	fw('\n}')
-	fw('\n')
-
+	
 	# XXX, shouldnt be global!
 	for mapping in (sane_name_mapping_ob,
 					sane_name_mapping_ob_unique,
