@@ -247,7 +247,19 @@ Changelog:
 _(not counting the ridiculous amount of edits after each update)_
 
 
-*1.0.0*
+*1.0.0t3*
+
+- massive performance improvement to normals editor code by switching to a temp list for calculations/display
+
+
+
+*1.0.0t2*
+
+- added partially working fbx 7.3 exporter
+- changed organization of 6.1 output files + added some exported variables
+
+
+*1.0.0t1*
 
 - removed redundant class for vertexn_meshdata list, switched to vert_data type
 - moved import/export buttons to proper menus
