@@ -29,6 +29,37 @@ http://blenderartists.org/forum/showthread.php?259554-Addon-EditNormals-Transfer
 - 'Merge Vertex Colors' does nothing at the moment.
 
 
+
+- Auto Generation and 3D Line Display should now work in both Edit and Object modes. 
+ 
+- Remaining mode limitations: 
+  - Object mode is required to use the Transfer function 
+  - Edit Mode is required for manual editing (for obvious reasons) 
+ 
+- Minor changes to data structure used for normals: 
+  - Removed face center and vert position data. 
+  - Older files should still be compatible. 
+ 
+ 
+ 
+Editor: 
+- Custom normals can't be applied visually with shape keys or active modifiers. 
+  - They can still be edited, exported and displayed as lines. 
+ 
+Exporter: 
+- When using poly mode (split) custom normals, the mesh must be triangulated before editing custom normals. 
+  - Vertex mode custom normals are not affected by triangulation and should export correctly after doing so. 
+ 
+- Exporting with default tangents requires default normals and a triangulated mesh. 
+  - Without triangulation, one face will be reversed/split in the output. 
+  - The exporter will not export tangents if default tangents are selected with custom or automatic normals. 
+ 
+- All bones in the armature must have deform enabled when using custom scale or axis settings with a skeletal mesh. 
+  - Bones without deform enabled will have weird scales and rotations. 
+  - This is relevant for applications that require the use of end bones. 
+  - Planned integration of leaf bone changes from the new official exporter should fix this. 
+
+
 --------------------------------------------------------------------------------
 
 *Installation:*
@@ -75,9 +106,8 @@ _Editor for Vertex Normals:_
     - *Ground Foliage* (selected ground based vertices point up, everything else bent from an offset point) 
     - *Custom* (similar to Blender's default normals with the ability to generate normals for selected faces as if they are disconnected) 
 - Allows calculating normals for selected faces or the whole mesh 
-- Normals can be displayed as lines for visual editing 
+- Normals can be displayed as lines for visual editing or applied to the mesh if in vertex mode
 - copy/paste selected normals between meshes with identical vert locations (buggy/wip, but fixes modular mesh seams when it works) 
-- Real-time in Edit Mode 
 
 
 _Customized FBX Exporter:_
@@ -89,10 +119,10 @@ _Customized FBX Exporter:_
   - root bone fix that removes the armature bone from the exported file 
     - root bone is now parented to the scene to stop weirdness with some software and UE physics 
     - this fix also allows mesh orientations to be exported without having to mess around with the axis settings 
-  - tangents are pretty close to UDK 
+  - new option to export default tangents (when using default normals)
+  - custom tangents are pretty close to UDK's
 - Exported meshes should now be fully compatible with nvidia's Apex Tools, xNormal and most other software that uses the FBX format 
   - (previous versions caused crashes on import for some software) 
-- Exports animations for both UDK and UE4 properly now 
 	
 
 _Importer for Normals:_

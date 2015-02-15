@@ -4,10 +4,8 @@ bl_info = {
 	"version": (1, 0, 0),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
-	"description": "Adds an editor for vertex normals and an fbx exporter "
-					"with some Unreal Engine-specific optimizations. "
-					" Also supports tangent and binormal calculation/export."
-					"",
+	"description": "Vertex normal editor + modified FBX exporter for "
+					"custom normals, tangents and tweaks for UDK/UE",
 	"warning": "",
 	"wiki_url": "",
 	"tracker_url": "https://github.com/isathar/Blender_UDK_FBX_Tools/issues/",
@@ -43,6 +41,7 @@ class vertex_normals_panel(bpy.types.Panel):
 	def draw(self, context):
 		layout = self.layout
 		
+		# check if editor tab should be visible
 		showeditor = False
 		if context.window_manager.edit_splitnormals:
 			if 'polyn_meshdata' in context.active_object:
@@ -53,99 +52,109 @@ class vertex_normals_panel(bpy.types.Panel):
 				showeditor = True
 			
 		if showeditor:
+			# Mesh Data (if saved data exists)
 			box = layout.box()
-			box.prop(context.window_manager, 'vnpanel_showmeshdata', 
-					text='Mesh Data', toggle=True)
+			if context.window_manager.edit_splitnormals:
+				box.prop(context.window_manager, 'vnpanel_showmeshdata', 
+						text='Mesh Data (Poly)', toggle=True)
+			else:
+				box.prop(context.window_manager, 'vnpanel_showmeshdata', 
+						text='Mesh Data (Vertex)', toggle=True)
+			
 			if context.window_manager.vnpanel_showmeshdata:
 				box2 = box.box()
-				row = box2.row()
-				row.operator('object.reset_polydata', text='Reset')
-				row.operator('object.clear_polydata', text='Clear')
-				
-				if context.window_manager.edit_splitnormals:
-					box2.row().label(" Mode: Per Poly", 'NONE')
-				else:
-					box2.row().label(" Mode: Per Vertex", 'NONE')
+				box2.row().operator('object.reset_polydata', text='Reset')
+				box2.row().operator('object.clear_polydata', text='Clear')
 				
 				box2.row().operator('object.switch_normalsmode', 
-									text='Switch Mode')
+						text='Switch Mode')
 				box2.row().prop(context.window_manager,'convert_splitnormals',
-								text='Convert on Switch')
+						text='Convert on Switch')
 				box2.row().operator('object.display_normalsonmesh', 
-									text='Apply to Mesh')
-			
+						text='Apply to Mesh')
+				
+				if 'vertex_normal_list' in context.active_object:
+					row.operator('object.copy_normals_recalcvertexnormals', 
+							text='Copy from RVN')
+				
 			# Auto Generate
 			genmode = context.window_manager.vn_generatemode
 			box = layout.box()
 			box.prop(context.window_manager, 'vnpanel_showautogen', 
 						text='Auto Generate', toggle=True)
 			if context.window_manager.vnpanel_showautogen:
-				if context.mode == "EDIT_MESH":
-					box2 = box.box()
-					
-					if genmode == 'UPVECT':
-						box2.row().label("Direction:", 'NONE')
-						box2.row().column().prop(context.window_manager,
-												'vn_directionalvector', text='')
-						
-					if genmode != 'G_FOLIAGE' and genmode != 'DEFAULT':
-						if genmode == 'BENT':
-							box2.row().prop(context.window_manager,
-											'vn_genbendingratio',
-											text='Bend Ratio')
-						
-						box2.row().prop(context.window_manager, 
-											'vn_genselectiononly',
-											text='Selected Only')
-						
-						if not context.window_manager.edit_splitnormals:
-							box2.row().column().prop(context.window_manager,
-													'vn_settomeshongen',
-													text='Apply to Mesh')
-						
-					elif genmode == 'G_FOLIAGE':
-						box2.row().column().prop(context.window_manager,
-												'vn_centeroffset',
-												text='Center Offset')
+				#if context.mode == "EDIT_MESH":
+				box2 = box.box()
+				
+				if genmode == 'UPVECT':
+					box2.row().label("Direction:", 'NONE')
+					box2.row().column().prop(context.window_manager,
+							'vn_directionalvector',
+							text='')
+				
+				if genmode != 'G_FOLIAGE' and genmode != 'DEFAULT':
+					if genmode == 'BENT':
 						box2.row().prop(context.window_manager,
-										'vn_genignorehidden',
-										text='Ignore Hidden')
+							'vn_genbendingratio',
+							text='Bend Ratio')
+					box2.row().prop(context.window_manager, 
+							'vn_genselectiononly',
+							text='Selected Only')
 					
+					if not context.window_manager.edit_splitnormals:
+						box2.row().column().prop(context.window_manager,
+								'vn_settomeshongen',
+								text='Apply to Mesh')
+					
+				elif genmode == 'G_FOLIAGE':
+					box2.row().column().prop(context.window_manager,
+							'vn_centeroffset',
+							text='Center Offset')
 					box2.row().prop(context.window_manager,
-									'vn_generatemode', text='')
-					box2.row().operator('object.generate_vnormals',
-										text='Generate')
-				else:
-					box.box().row().label("Edit Mode required", 'NONE')
-			
+							'vn_genignorehidden',
+							text='Ignore Hidden')
+				
+				box2.row().prop(context.window_manager,
+						'vn_generatemode', text='')
+				box2.row().operator('object.generate_vnormals',
+						text='Generate')
+				#else:
+				#	box.box().row().label("Edit Mode required", 'NONE')
 			
 			# Transfer Normals
 			box = layout.box()
 			box.prop(context.window_manager, 'vnpanel_showtransnormals',
-						text='Transfer', toggle=True)
+					text='Transfer', toggle=True)
 			if context.window_manager.vnpanel_showtransnormals:
 				if context.mode == "OBJECT":
 					box2 = box.box()
 					if "object_transfervertexnorms" in context.user_preferences.addons.keys():
 						box2.row().prop_search(context.window_manager, 
-												"normtrans_sourceobj", 
-												context.scene, 
-												"objects", 
-												"Source")
+								"normtrans_sourceobj", 
+								context.scene, 
+								"objects", 
+								"Source",
+								"Source",
+								False,
+								'MESH_CUBE')
 						box2.row().prop(context.window_manager,
-										'normtrans_influence', text='Influence')
+								'normtrans_influence', 
+								text='Influence')
 						box2.row().prop(context.window_manager,
-										'normtrans_maxdist', text='Distance')
+								'normtrans_maxdist', 
+								text='Distance')
 						box2.row().prop(context.window_manager,
-										'normtrans_bounds', text='Bounds')
+								'normtrans_bounds', 
+								text='Bounds')
 						box2.row().operator('object.transfer_normalstoobj',
-										text='Transfer Normals')
+								text='Transfer Normals')
 					else:
-						box2.row().label("Transfer Vertex Normals Addon required",
-											'NONE')
+						box2.row().label(
+								"Transfer Vertex Normals Addon required",
+								'NONE')
+					
 				else:
 					box.box().row().label("Object Mode required", 'NONE')
-			
 			
 			# Manual edit
 			box = layout.box()
@@ -155,22 +164,23 @@ class vertex_normals_panel(bpy.types.Panel):
 				if context.mode == "EDIT_MESH":
 					box2 = box.box()
 					box2.row().column().prop(context.window_manager,
-								'vn_curnormal_disp', text='')
+							'vn_curnormal_disp', text='')
 					if context.window_manager.edit_splitnormals:
 						box2.row().prop(context.window_manager,
-										'vn_selected_face', text='Vert Index')
+								'vn_selected_face', text='Vert Index')
+					
 					row = box2.row()
 					row.operator('object.get_vnormal', text='Get')
 					row.operator('object.set_vnormal', text='Set')
 					
 					box2.row().prop(context.window_manager,
-									'vn_realtimeedit', text='Real-Time')
+							'vn_realtimeedit', text='Real-Time')
+					
 					if context.window_manager.edit_splitnormals:
 						box2.row().prop(context.window_manager,
-										'vn_changeasone', text='Edit All')
+								'vn_changeasone', text='Edit All')
 				else:
 					box.box().row().label("Edit Mode required", 'NONE')
-			
 			
 			# Display
 			box = layout.box()
@@ -179,32 +189,42 @@ class vertex_normals_panel(bpy.types.Panel):
 			if context.window_manager.vnpanel_showdisplay:
 				box2 = box.box()
 				box2.prop(context.window_manager,
-							'vn_disp_scale', text='Scale')
+						'vn_disp_scale', text='Scale')
 				box2.prop(context.window_manager,
-							'vn_displaycolor', text='Color')
+						'vn_displaycolor', text='Color')
+				
 				if context.mode == "EDIT_MESH":
 					box2.row().prop(context.window_manager,
-								'vndisp_selectiononly', text='Selected Only')
+							'vndisp_selectiononly', text='Selected Only')
+				
 				if context.window_manager.showing_vnormals < 1:
 					box2.row().operator('view3d.show_vertexnormals',
-										text='Show Normals')
+							text='Show Normals')
 				else:
 					box2.row().operator('view3d.show_vertexnormals',
-										text='Hide Normals')
+							text='Hide Normals')
 			
 		else:
+			# Mesh Data (if no saved data exists)
 			box = layout.box()
 			box.prop(context.window_manager, 'vnpanel_showmeshdata',
-						text='Mesh Data', toggle=True)
+					text='Mesh Data', toggle=True)
 			if context.window_manager.vnpanel_showmeshdata:
 				box.row().operator('object.reset_polydata', text='Initialize')
-			
+				if context.window_manager.edit_splitnormals:
+					if 'polyn_meshdata' in context.active_object:
+						box.row().operator('object.load_polydata',
+								text='Load')
+				elif 'vertexn_meshdata' in context.active_object:
+					box.row().operator('object.load_polydata', text='Load')
 
 
+# reset data to default normals
 class reset_polydata(bpy.types.Operator):
 	bl_idname = 'object.reset_polydata'
-	bl_label = 'Create Mesh Data'
+	bl_label = 'Create Normals Data'
 	bl_description = 'Recreate mesh data struct'
+	bl_options = {'REGISTER', 'UNDO'}
 	
 	@classmethod
 	def poll(cls, context):
@@ -224,15 +244,17 @@ class reset_polydata(bpy.types.Operator):
 		return {'FINISHED'}
 
 
+# delete data
 class clear_polydata(bpy.types.Operator):
 	bl_idname = 'object.clear_polydata'
-	bl_label = 'Delete Mesh Data'
+	bl_label = 'Delete Normals Data'
 	bl_description = 'Delete mesh data struct'
+	bl_options = {'REGISTER', 'UNDO'}
+	# doesn't work with undo
 	
 	@classmethod
 	def poll(cls, context):
-		return (len(editorfunctions.normals_data.cust_normals_ppoly) > 0) or (
-				len(editorfunctions.normals_data.cust_normals_pvertex) > 0)
+		return True
 	
 	def execute(self, context):
 		if 'showing_vnormals' in context.window_manager:
@@ -250,12 +272,32 @@ class clear_polydata(bpy.types.Operator):
 		return {'FINISHED'}
 
 
+# load editor variabes from previously saved mesh data
+class load_polydata(bpy.types.Operator):
+	bl_idname = 'object.load_polydata'
+	bl_label = 'Load Normals Data'
+	bl_description = 'Load mesh data struct'
+	bl_options = {'REGISTER', 'UNDO'}
+	# undo doesn't work for this since no data is changed
+	
+	@classmethod
+	def poll(cls, context):
+		if context.active_object != None:
+			if context.active_object.type == 'MESH':
+				return True
+		return False
+	
+	def execute(self, context):
+		editorfunctions.load_normalsdata(context)
+		return {'FINISHED'}
+	
 
 # get selected normal(s)
 class get_vnormal(bpy.types.Operator):
 	bl_idname = 'object.get_vnormal'
 	bl_label = 'Get Normal'
 	bl_description = 'Get normal for selection'
+	# no need for undo
 	
 	@classmethod
 	def poll(cls, context):
@@ -298,16 +340,19 @@ class show_vertexnormals(bpy.types.Operator):
 	bl_label = 'Show Normals'
 	bl_description = 'Display custom normals as 3D lines'
 	
+	
 	_handle = None
 	
 	@classmethod
 	def poll(cls, context):
 		if context.window_manager.edit_splitnormals:
-			return (len(editorfunctions.normals_data.cust_normals_ppoly) > 0)
-		else:
-			return (len(editorfunctions.normals_data.cust_normals_pvertex) > 0)
-		context.window_manager.showing_vnormals = -1
-		return False
+			if len(editorfunctions.normals_data.cust_normals_ppoly) <= 0:
+				context.window_manager.showing_vnormals = -1
+				return False
+		elif len(editorfunctions.normals_data.cust_normals_pvertex) <= 0:
+			context.window_manager.showing_vnormals = -1
+			return False
+		return True
 	
 	def modal(self, context, event):
 		if context.area:
@@ -321,10 +366,11 @@ class show_vertexnormals(bpy.types.Operator):
 	
 	def invoke(self, context, event):
 		if context.area.type == "VIEW_3D":
-			
 			if context.window_manager.showing_vnormals < 1:
-				if editorfunctions.normals_data.lastdisplaymesh != context.active_object.data.name:
-					editorfunctions.normals_data.lastdisplaymesh = context.active_object.data.name
+				curobjname = context.active_object.data.name
+				
+				if editorfunctions.normals_data.lastdisplaymesh != curobjname:
+					editorfunctions.normals_data.lastdisplaymesh = curobjname
 				context.window_manager.showing_vnormals = 1
 				
 				self._handle = bpy.types.SpaceView3D.draw_handler_add(
@@ -351,12 +397,12 @@ class generate_vnormals(bpy.types.Operator):
 	
 	@classmethod
 	def poll(cls, context):
-		if context.mode=="EDIT_MESH":
-			if context.window_manager.edit_splitnormals:
-				if len(editorfunctions.normals_data.cust_normals_ppoly) > 0:
-					return True
-			elif len(editorfunctions.normals_data.cust_normals_pvertex) > 0:
+		#if context.mode=="EDIT_MESH":
+		if context.window_manager.edit_splitnormals:
+			if len(editorfunctions.normals_data.cust_normals_ppoly) > 0:
 				return True
+		elif len(editorfunctions.normals_data.cust_normals_pvertex) > 0:
+			return True
 		return False
 	
 	def execute(self, context):
@@ -371,6 +417,7 @@ class display_normalsonmesh(bpy.types.Operator):
 	bl_idname = 'object.display_normalsonmesh'
 	bl_label = 'Display Normals'
 	bl_description = 'Applies normals to mesh in vertex mode'
+	bl_options = {'REGISTER', 'UNDO'}
 	
 	@classmethod
 	def poll(cls, context):
@@ -399,11 +446,6 @@ class switch_normalsmode(bpy.types.Operator):
 		return False
 	
 	def execute(self, context):
-		if len(editorfunctions.normals_data.cust_normals_ppoly) > 0:
-			editorfunctions.normals_data.cust_normals_ppoly.clear()
-		if len(editorfunctions.normals_data.cust_normals_pvertex) > 0:
-			editorfunctions.normals_data.cust_normals_pvertex.clear()
-		
 		if context.window_manager.edit_splitnormals:
 			context.window_manager.edit_splitnormals = False
 		else:
@@ -422,7 +464,7 @@ class transfer_normalstoobj(bpy.types.Operator):
 	
 	@classmethod
 	def poll(cls, context):
-		if context.mode == "OBJECT":
+		if context.mode == 'OBJECT':
 			if not context.window_manager.edit_splitnormals:
 				if "object_transfervertexnorms" in context.user_preferences.addons.keys():
 					if context.window_manager.normtrans_bounds == 'ONLY':
@@ -436,6 +478,23 @@ class transfer_normalstoobj(bpy.types.Operator):
 		editorfunctions.transfer_normals(self, context)
 		return {'FINISHED'}
 
+
+class copy_normals_recalcvertexnormals(bpy.types.Operator):
+	bl_idname = 'object.copy_normals_recalcvertexnormals'
+	bl_label = 'Copy from RVN'
+	bl_description = 'Copy normals saved by the Recalc Vertex Normals addon'
+	bl_options = {'REGISTER', 'UNDO'}
+	
+	@classmethod
+	def poll(cls, context):
+		if not context.window_manager.edit_splitnormals:
+			return ('vertex_normal_list' in context.active_object)
+		return False
+	
+	def execute(self, context):
+		editorfunctions.copy_fromadsn(context)
+		return {'FINISHED'}
+	
 
 
 #####################
@@ -600,6 +659,7 @@ def register():
 	bpy.utils.register_class(import_normals.import_customnormals)
 	# Main Panel:
 	bpy.utils.register_class(reset_polydata)
+	bpy.utils.register_class(load_polydata)
 	bpy.utils.register_class(clear_polydata)
 	bpy.utils.register_class(switch_normalsmode)
 	# Editor Panel
@@ -611,6 +671,10 @@ def register():
 	bpy.utils.register_class(display_normalsonmesh)
 	
 	bpy.utils.register_class(transfer_normalstoobj)
+	bpy.utils.register_class(copy_normals_recalcvertexnormals)
+	
+	
+	
 	
 	bpy.types.INFO_MT_file_export.append(exportmenu_func)
 	bpy.types.INFO_MT_file_import.append(importmenu_func)
@@ -621,6 +685,7 @@ def register():
 def unregister():
 	#Main Panel:
 	bpy.utils.unregister_class(reset_polydata)
+	bpy.utils.unregister_class(load_polydata)
 	bpy.utils.unregister_class(clear_polydata)
 	bpy.utils.unregister_class(switch_normalsmode)
 	
@@ -639,6 +704,7 @@ def unregister():
 	bpy.utils.unregister_class(normalslist_polymode)
 	
 	bpy.utils.unregister_class(transfer_normalstoobj)
+	bpy.utils.unregister_class(copy_normals_recalcvertexnormals)
 	
 	bpy.types.INFO_MT_file_export.remove(exportmenu_func)
 	bpy.types.INFO_MT_file_import.remove(importmenu_func)

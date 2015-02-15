@@ -1125,21 +1125,28 @@ References:  {
 
 		fw('\n\t\tTypeFlags: "%s"' % fbxTypeFlags)
 		fw('\n\t}')
-
+	
 	# Material Settings
 	if world:
 		world_amb = world.ambient_color[:]
 	else:
 		world_amb = 0.0, 0.0, 0.0  # default value
-
+	
 	def write_material(matname, mat):
-		fw('\n\tMaterial: "Material::%s", "" {' % matname)
-
+		mat_cols = mat_cold = 0.8, 0.8, 0.8
+		mat_colamb = 0.0, 0.0, 0.0
+		mat_dif = 1.0
+		mat_amb = 0.5
+		mat_hard = 20.0
+		mat_spec = 0.2
+		mat_alpha = 1.0
+		mat_emit = 0.0
+		mat_shadeless = False
+		mat_shader = 'Phong'
 		# Todo, add more material Properties.
 		if mat:
 			mat_cold = tuple(mat.diffuse_color)
 			mat_cols = tuple(mat.specular_color)
-			#mat_colm = tuple(mat.mirCol) # we wont use the mirror color
 			mat_colamb = world_amb
 
 			mat_dif = mat.diffuse_intensity
@@ -1156,19 +1163,9 @@ References:  {
 					mat_shader = 'Lambert'
 				else:
 					mat_shader = 'Phong'
-		else:
-			mat_cols = mat_cold = 0.8, 0.8, 0.8
-			mat_colamb = 0.0, 0.0, 0.0
-			# mat_colm
-			mat_dif = 1.0
-			mat_amb = 0.5
-			mat_hard = 20.0
-			mat_spec = 0.2
-			mat_alpha = 1.0
-			mat_emit = 0.0
-			mat_shadeless = False
-			mat_shader = 'Phong'
-
+		
+		#write
+		fw('\n\tMaterial: "Material::%s", "" {' % matname)
 		fw('\n\t\tVersion: 102')
 		fw('\n\t\tShadingModel: "%s"' % mat_shader.lower())
 		fw('\n\t\tMultiLayer: 0')

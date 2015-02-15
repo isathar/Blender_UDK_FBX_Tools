@@ -57,6 +57,9 @@ from mathutils import Vector, Matrix
 
 from bpy_extras.io_utils import axis_conversion
 
+from . import exporter_data
+
+
 # I guess FBX uses degrees instead of radians (Arystan).
 # Call this function just before writing to FBX.
 # 180 / math.pi == 57.295779513
@@ -512,21 +515,21 @@ def save_single(operator, scene, filepath="",
 			P: "Original", "Compound", "", ""
 			P: "Original|ApplicationVendor", "KString", "", "", ""
 			P: "Original|ApplicationName", "KString", "", "", "Blender"
-			P: "Original|ApplicationVersion", "KString", "", "", "2.73"
+			P: "Original|ApplicationVersion", "KString", "", "", "%s"
 			P: "Original|DateTime_GMT", "DateTime", "", "", ""
 			P: "Original|FileName", "KString", "", "", ""
 			P: "LastSaved", "Compound", "", ""
 			P: "LastSaved|ApplicationVendor", "KString", "", "", ""
 			P: "LastSaved|ApplicationName", "KString", "", "", "Blender"
-			P: "LastSaved|ApplicationVersion", "KString", "", "", "2.73"
-			P: "LastSaved|DateTime_GMT", "DateTime", "", "", ""
+			P: "LastSaved|ApplicationVersion", "KString", "", "", "%s"
+			P: "LastSaved|DateTime_GMT", "DateTime", "", "", "%s"
 		}
-	}''')
+	}''' % (bpy.app.version_string, bpy.app.version_string, curtime))
 	fw('\n}\n')
 	
 	# Write global settings
 	fw('''GlobalSettings:  {
-	Version: 1000
+	Version: 10
 	Properties70:  {
 		P: "UpAxis", "int", "Integer", "",1
 		P: "UpAxisSign", "int", "Integer", "",1
@@ -619,94 +622,6 @@ def save_single(operator, scene, filepath="",
 				rot = 0.0, 0.0, 0.0
 
 		return loc, rot, scale, matrix, matrix_rot
-	
-	
-	
-	# getters for id codes used to identify objects in fbx 7.3 format
-	# 100000 = Documents
-	
-	def get_fbx_GeomID(ob):
-		base = 200000
-		cnt = 1
-		for obj in bpy.context.scene.objects:
-			if (obj == ob):
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_MeshID(ob):
-		base = 300000
-		cnt = 1
-		for obj in bpy.context.scene.objects:
-			if (obj == ob):
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_MaterialID(mat, matlist):
-		base = 400000
-		cnt = 1
-		for matname, (mat2, tex) in matlist:
-			if mat2 == mat:
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_TextureID(intex, texlist):
-		base = 500000
-		cnt = 1
-		for texname, tex in textures:
-			if tex == intex:
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_VideoID(intex, texlist):
-		base = 600000
-		cnt = 1
-		for texname, tex in textures:
-			if tex == intex:
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_BoneAttributeID(inbone, boneslist):
-		base = 700000
-		cnt = 1
-		for checkbone in boneslist:
-			if checkbone == inbone:
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_BoneID(inbone, boneslist):
-		base = 310000
-		cnt = 1
-		for checkbone in boneslist:
-			if checkbone == inbone:
-				return (base + cnt)
-			cnt += 1
-		return base
-	
-	def get_fbx_DeformerID(bone, checkmesh, meshlist, boneslist):
-		base = 800000
-		cnt = 0
-		bcnt = 0
-		for my_mesh in meshlist:
-			if my_mesh.fbxArm:
-				cnt += 1
-				if my_mesh == bone:
-					return (base + cnt + bcnt)
-				
-				for my_bone in boneslist:
-					bcnt += 1
-					if my_mesh == checkmesh:
-						if my_bone == bone:
-							return (base + cnt + bcnt)
-				
-				
-				
-		return base
 	
 	
 	
@@ -865,88 +780,7 @@ def save_single(operator, scene, filepath="",
 
 		return loc, rot, scale, matrix, matrix_rot
 	
-	################################
-	# Armatures
 	
-	# Bones:
-	# NodeAttributes: size, limblength for now
-	def write_bone_node(my_bone, bindex):
-		bindex = bindex + 700000
-		templlength = (my_bone.blenBone.head_local - my_bone.blenBone.tail_local).length
-		fw('\n\tNodeAttribute: %i, ' % bindex)
-		if my_bone.blenBone.parent:
-			fw('"NodeAttribute::%s", "LimbNode" {' % my_bone.fbxName)
-		else:
-			fw('"NodeAttribute::%s", "Root" {' % my_bone.fbxName)
-		fw('''
-		Properties70:  {
-			P: "Size", "double", "Number", "",1
-			P: "LimbLength", "double", "Number", "H",%f
-		}
-		TypeFlags: "Skeleton"
-	}''' % templlength)
-	
-	
-	# Limb: offset, scale, rotation
-	def write_bone_props(my_bone, bindex):
-		bindex = bindex + 310000
-		
-		if my_bone.parent:
-			global_matrix_bone = my_bone.restMatrix
-		else:
-			global_matrix_bone = (my_bone.restMatrix * my_bone.fbxArm.matrixWorld) * mtx4_z90
-		#pose_items.append((my_bone.fbxName, global_matrix_bone, my_bone.fbxName))
-		
-		#pose_items.append((my_bone.fbxName, my_bone.fbxArm.matrixWorld, my_bone.fbxName))
-		loc, rot, scale, matrix, matrix_rot = object_tx(my_bone.blenBone, None,global_matrix_bone)
-		#loc, rot, scale, matrix, matrix_rot = object_tx(my_bone.blenBone, None,my_bone.fbxArm.matrixWorld)
-		pose_items.append((my_bone.fbxName, matrix, my_bone.fbxName))
-		
-		lclrot = tuple_rad_to_deg(rot)
-		
-		fw('\n\tModel: %i, "Model::' % bindex)
-		if my_bone.blenBone.parent:
-			fw('%s", "LimbNode" {' % my_bone.fbxName)
-		else:
-			fw('%s", "Root" {' % my_bone.fbxName)
-		fw('''
-		Version: 232
-		Properties70:  {
-			P: "ScalingMin", "Vector3D", "Vector", "",1,1,1
-			P: "DefaultAttributeIndex", "int", "Integer", "",0''')
-		fw('\n\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",%.15f,%.15f,%.15f' % loc)
-		fw('\n\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A+",1,1,1')
-		fw('\n\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A+",%.15f,%.15f,%.15f' % lclrot)
-		fw('\n\t\t}\n\t\tShading: Y')
-		fw('\n\t\tCulling: "CullingOff"')
-		fw('\n\t}')
-		
-	
-	# added for 7.3 support
-	def write_modelattributes(my_mesh):
-		loc, rot, scale, matrix, matrix_rot = object_tx(my_mesh.blenObject, None, my_mesh.blenObject.matrix_world * global_matrix)
-		#newmatrix = my_mesh.blenObject.matrix_world * global_matrix
-		#loc, rot, scale = my_mesh.blenObject.matrix_world * global_matrix
-		lclrot = tuple_rad_to_deg(rot)
-		
-		fw('\n\tModel: %i, "Model::' % get_fbx_MeshID(my_mesh.blenObject))
-		fw('%s", "Mesh" {' % my_mesh.fbxName)
-		fw('''
-		Version: 232
-		Properties70:  {
-			P: "ScalingMin", "Vector3D", "Vector", "",1,1,1
-			P: "DefaultAttributeIndex", "int", "Integer", "",0''')
-		fw('\n\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",%.15f,%.15f,%.15f' % loc)
-		fw('\n\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A+",%.15f,%.15f,%.15f' % scale)
-		fw('\n\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A+",%.15f,%.15f,%.15f' % lclrot)
-		fw('''
-			P: "Size", "double", "Number", "",100
-			P: "Look", "enum", "", "",1
-		}''')
-		fw('\n\t\tShading: Y')
-		fw('\n\t\tCulling: "CullingOff"')
-		fw('\n\t}')
-		
 	#################################
 	# Cameras
 	def write_camera_switch():
@@ -1319,24 +1153,110 @@ def save_single(operator, scene, filepath="",
 
 		fw('\n\t\tTypeFlags: "%s"' % fbxTypeFlags)
 		fw('\n\t}')
-
-	# Material Settings
-	if world:
-		world_amb = world.ambient_color[:]
-	else:
-		world_amb = 0.0, 0.0, 0.0  # default value
+	
+	
+	# Bones:
+	
+	# NodeAttributes: size, limblength for now
+	def write_bone_node(my_bone, bindex):
+		bindex = exporter_data.get_fbx_BoneAttributeID(my_bone.fbxName)
+		templlength = (my_bone.blenBone.head_local - my_bone.blenBone.tail_local).length
+		fw('\n\tNodeAttribute: %i, ' % bindex)
+		if my_bone.blenBone.parent:
+			fw('"NodeAttribute::%s", "LimbNode" {' % my_bone.fbxName)
+		else:
+			fw('"NodeAttribute::%s", "Root" {' % my_bone.fbxName)
+		fw('''
+		Properties70:  {
+			P: "Size", "double", "Number", "",1
+			P: "LimbLength", "double", "Number", "H",%f
+		}
+		TypeFlags: "Skeleton"
+	}''' % templlength)
+	
+	
+	# Limb: offset, scale, rotation
+	def write_bone_props(my_bone, bindex):
+		bindex = exporter_data.get_fbx_BoneID(my_bone.fbxName)
+		
+		if my_bone.parent:
+			global_matrix_bone = my_bone.restMatrix
+		else:
+			global_matrix_bone = (my_bone.restMatrix * my_bone.fbxArm.matrixWorld) * mtx4_z90
+		#pose_items.append((my_bone.fbxName, global_matrix_bone, my_bone.fbxName))
+		
+		#pose_items.append((my_bone.fbxName, my_bone.fbxArm.matrixWorld, my_bone.fbxName))
+		loc, rot, scale, matrix, matrix_rot = object_tx(my_bone.blenBone, None,global_matrix_bone)
+		#loc, rot, scale, matrix, matrix_rot = object_tx(my_bone.blenBone, None,my_bone.fbxArm.matrixWorld)
+		pose_items.append((my_bone.fbxName, matrix, my_bone.fbxName))
+		
+		lclrot = tuple_rad_to_deg(rot)
+		
+		fw('\n\tModel: %i, "Model::' % bindex)
+		if my_bone.blenBone.parent:
+			fw('%s", "LimbNode" {' % my_bone.fbxName)
+		else:
+			fw('%s", "Root" {' % my_bone.fbxName)
+		fw('''
+		Version: 232
+		Properties70:  {
+			P: "ScalingMin", "Vector3D", "Vector", "",1,1,1
+			P: "DefaultAttributeIndex", "int", "Integer", "",0''')
+		fw('\n\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",%.15f,%.15f,%.15f' % loc)
+		fw('\n\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A+",1,1,1')
+		fw('\n\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A+",%.15f,%.15f,%.15f' % lclrot)
+		fw('\n\t\t}\n\t\tShading: Y')
+		fw('\n\t\tCulling: "CullingOff"')
+		fw('\n\t}')
+		
+	
+	# added for 7.3 support
+	def write_modelattributes(my_mesh):
+		loc, rot, scale, matrix, matrix_rot = object_tx(my_mesh.blenObject, None, my_mesh.blenObject.matrix_world * global_matrix)
+		#newmatrix = my_mesh.blenObject.matrix_world * global_matrix
+		#loc, rot, scale = my_mesh.blenObject.matrix_world * global_matrix
+		lclrot = tuple_rad_to_deg(rot)
+		
+		fw('\n\tModel: %i, "Model::' % exporter_data.get_fbx_MeshID(my_mesh.blenObject.name))
+		fw('%s", "Mesh" {' % my_mesh.fbxName)
+		fw('''
+		Version: 232
+		Properties70:  {
+			P: "ScalingMin", "Vector3D", "Vector", "",1,1,1
+			P: "DefaultAttributeIndex", "int", "Integer", "",0''')
+		fw('\n\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",%.15f,%.15f,%.15f' % loc)
+		fw('\n\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A+",%.15f,%.15f,%.15f' % scale)
+		fw('\n\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A+",%.15f,%.15f,%.15f' % lclrot)
+		fw('''
+			P: "Size", "double", "Number", "",100
+			P: "Look", "enum", "", "",1
+		}''')
+		fw('\n\t\tShading: Y')
+		fw('\n\t\tCulling: "CullingOff"')
+		fw('\n\t}')
 	
 	
 	# Materials
-	def write_material(matname, mat, index):
-		baseid = 400000 + index
-		fw('\n\tMaterial: %i, ' % baseid)
-		fw('"Material::%s", "" {' % mat.name)
+	def write_material(mat):
+		# gather
+		mat_cols = mat_cold = 0.8, 0.8, 0.8
+		mat_colamb = 0.0, 0.0, 0.0
+		mat_dif = 1.0
+		mat_amb = 0.5
+		mat_hard = 20.0
+		mat_spec = 0.2
+		mat_alpha = 1.0
+		mat_emit = 0.0
+		mat_shadeless = False
+		mat_shader = 'Phong'
 		
 		if mat:
+			world_amb = 0.0, 0.0, 0.0
+			if world:
+				world_amb = world.ambient_color[:]
+			
 			mat_cold = tuple(mat.diffuse_color)
 			mat_cols = tuple(mat.specular_color)
-			#mat_colm = tuple(mat.mirCol) # we wont use the mirror color
 			mat_colamb = world_amb
 
 			mat_dif = mat.diffuse_intensity
@@ -1346,26 +1266,17 @@ def save_single(operator, scene, filepath="",
 			mat_alpha = mat.alpha
 			mat_emit = mat.emit
 			mat_shadeless = mat.use_shadeless
-			if mat_shadeless:
-				mat_shader = 'Lambert'
-			else:
+			mat_shader = 'Lambert'
+			
+			if not mat_shadeless:
 				if mat.diffuse_shader == 'LAMBERT':
 					mat_shader = 'Lambert'
 				else:
 					mat_shader = 'Phong'
-		else:
-			mat_cols = mat_cold = 0.8, 0.8, 0.8
-			mat_colamb = 0.0, 0.0, 0.0
-			# mat_colm
-			mat_dif = 1.0
-			mat_amb = 0.5
-			mat_hard = 20.0
-			mat_spec = 0.2
-			mat_alpha = 1.0
-			mat_emit = 0.0
-			mat_shadeless = False
-			mat_shader = 'Phong'
 		
+		# write
+		fw('\n\tMaterial: %i, ' % exporter_data.get_fbx_MaterialID(mat.name))
+		fw('"Material::%s", "" {' % mat.name)
 		fw('\n\t\tVersion: 102')
 		fw('\n\t\tShadingModel: "%s"' % mat_shader.lower())
 		fw('\n\t\tMultiLayer: 0')
@@ -1395,8 +1306,8 @@ def save_single(operator, scene, filepath="",
 	
 	
 	# Videos
-	def write_video(texname, tex, vidindex):
-		fw('\n\tVideo: %i, ' % (vidindex + 600000))
+	def write_video(texname, tex):
+		fw('\n\tVideo: %i, ' % exporter_data.get_fbx_VideoID(tex.name))
 		fw('"Video::%s", "Clip" {' % (texname))
 		
 		if tex:
@@ -1417,15 +1328,15 @@ def save_single(operator, scene, filepath="",
 		fw('\n\t}')
 	
 	# Textures
-	def write_texture(texname, tex, num):
-		fw('\n\tTexture: %i, ' % (num + 500000))
+	def write_texture(texname, tex):
+		fw('\n\tTexture: %i, ' % exporter_data.get_fbx_TextureID(tex.name))
 		fw('"Texture::%s", "" {' % texname)
 		fw('\n\t\tType: "TextureVideoClip"')
 		fw('\n\t\tVersion: 202')
 		
 		fw('\n\t\tTextureName: "Texture::%s"' % texname)
 		fw('\n\t\tProperties70:  {')
-		fw('\n\t\t\tP: "Texture alpha", "Number", "", "A+",%i' % num)
+		fw('\n\t\t\tP: "Texture alpha", "Number", "", "A+",%i' % 1)
 		fw('\n\t\t\tP: "UVSet", "KString", "", "", "default"')
 		fw('\n\t\t\tP: "VideoProperty", "object", "", ""')
 		fw('\n\t\t\tP: "CurrentMappingType", "enum", "", "",0')
@@ -1452,16 +1363,16 @@ def save_single(operator, scene, filepath="",
 	
 	
 	# deformers (skin)
-	def write_deformer_skin(obname, defid):
+	def write_deformer_skin(obname):
 		# Each mesh has its own deformer
-		fw('\n\tDeformer: %i,' % defid)
+		fw('\n\tDeformer: %i,' % exporter_data.get_fbx_DeformerSkinID(obname))
 		fw(''' "Deformer::Skin %s", "Skin" {
 		Version: 101
 		Link_DeformAcuracy: 50
 	}''' % obname)
 	
 	# deformers (cluster)
-	def write_sub_deformer_skin(my_mesh, my_bone, weights, defid):
+	def write_sub_deformer_skin(my_mesh, my_bone, weights):
 		"""
 		Each subdeformer is specific to a mesh, but the bone it links to can be used by many sub-deformers
 		So the SubDeformer needs the mesh-object name as a prefix to make it unique
@@ -1470,7 +1381,7 @@ def save_single(operator, scene, filepath="",
 		a but silly but dosnt really matter
 		"""
 		
-		fw('\n\tDeformer: %i, ' % defid)
+		fw('\n\tDeformer: %i, ' % exporter_data.get_fbx_DeformerClusterID(my_mesh.fbxName + '_' + my_bone.fbxName))
 		fw('"SubDeformer::Cluster %s ' % my_mesh.fbxName)
 		fw('%s", "Cluster" {' % my_bone.fbxName)
 		fw('''
@@ -1549,7 +1460,7 @@ def save_single(operator, scene, filepath="",
 	# shape geometry
 	def write_blend_shape_geometry(my_mesh):
 		key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
-		shapeid = get_fbx_GeomID(my_mesh.blenObject) + 1000
+		shapeid = exporter_data.get_fbx_GeomID(my_mesh.blenObject.name) + 10000
 		
 		for kb in key_blocks[1:]:
 			shapeid += 1
@@ -1611,14 +1522,14 @@ def save_single(operator, scene, filepath="",
 	# shape deformer
 	def write_blend_shape_deformer(my_mesh):
 		key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
-		shapeid = get_fbx_GeomID(my_mesh.blenObject) + 601000
+		shapeid = exporter_data.get_fbx_GeomID(my_mesh.blenObject.name) + 600000
 		
 		fw('\n\tDeformer: %i, "Deformer::", "BlendShape" {' % shapeid)
 		fw('\n\t\tVersion: 100\n\t}')
 		
+		shapekeycount = 10001
 		for kb in key_blocks[1:]:
-			shapeid += 1
-			fw('\n\tDeformer: %i, ' % shapeid)
+			fw('\n\tDeformer: %i, ' % (shapekeycount + shapeid))
 			fw('''"SubDeformer::%s", "BlendShapeChannel" {
 		Version: 100
 		DeformPercent: 0
@@ -1626,7 +1537,7 @@ def save_single(operator, scene, filepath="",
 			a: 100
 		} 
 	}''' % kb.name)
-		
+			shapekeycount += 1
 	
 	
 	#		Calculate uv direction for tangent space:
@@ -1658,6 +1569,8 @@ def save_single(operator, scene, filepath="",
 		me = my_mesh.blenData
 		meshobject = my_mesh.blenObject
 		
+		
+		
 		# if there are non NULL materials on this mesh
 		do_materials = bool(my_mesh.blenMaterials)
 		do_textures = bool(my_mesh.blenTextures)
@@ -1666,7 +1579,7 @@ def save_single(operator, scene, filepath="",
 						my_mesh.blenObject.data.shape_keys and
 						len(my_mesh.blenObject.data.vertices) == len(me.vertices))
 		
-		fw(('\n\tGeometry: %i, ' % get_fbx_GeomID(my_mesh.blenObject)) +  ('"Geometry::%s", "Mesh" {' % my_mesh.fbxName))
+		fw(('\n\tGeometry: %i, ' % exporter_data.get_fbx_GeomID(my_mesh.blenObject.name)) +  ('"Geometry::%s", "Mesh" {' % my_mesh.fbxName))
 		
 		me_vertices = [v for v in me.vertices]
 		me_edges = [e for e in me.edges] if use_mesh_edges else ()
@@ -2530,6 +2443,7 @@ def save_single(operator, scene, filepath="",
 								if mat not in matscheck:
 									matscheck.append(mat)
 									materials[mat, tex] = material_mapping_local[mat, tex] = None  # should use sets, wait for blender 2.5
+									exporter_data.index_fbxMaterials.append(mat.name)
 
 					else:
 						
@@ -2580,6 +2494,7 @@ def save_single(operator, scene, filepath="",
 					my_mesh.fbxBoneParent = blenParentBoneName  # replace with my_bone instance later
 
 					ob_meshes.append(my_mesh)
+					exporter_data.index_fbxModels.append(ob.name)
 
 		# not forgetting to free dupli_list
 		if ob_base.dupli_list:
@@ -2635,6 +2550,7 @@ def save_single(operator, scene, filepath="",
 			my_bone = my_bone_class(bone, my_arm)
 			my_arm.fbxBones.append(my_bone)
 			ob_bones.append(my_bone)
+			exporter_data.index_fbxBones.append(my_bone.fbxName)
 
 		if use_armature_deform_only:
 			del deform_map
@@ -2761,6 +2677,10 @@ def save_single(operator, scene, filepath="",
 			key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
 			for kb in key_blocks[1:]:
 				blendshapecount += 1
+	
+	# textureindex
+	for texname, tex in textures:
+		exporter_data.index_fbxTextures.append(tex.name)
 	
 	fw('''
 
@@ -3075,7 +2995,7 @@ Objects:  {''')
 	# added root node for 7.3 - still being read as invalid on UE import
 	
 	fw('''
-	Pose: 110000, "Pose::BIND_POSES", "BindPose" {
+	Pose: 100, "Pose::BIND_POSES", "BindPose" {
 		Type: "BindPose"
 		Version: 100
 		NbPoseNodes: %i
@@ -3099,9 +3019,12 @@ Objects:  {''')
 					tempobj = b
 					isBone = True
 		
-		tempname = get_fbx_MeshID(tempobj)
+		tempname = ''
+		
 		if isBone:
-			tempname = get_fbx_BoneID(tempobj, ob_bones)
+			tempname = exporter_data.get_fbx_BoneID(tempobj.fbxName)
+		else:
+			tempname = exporter_data.get_fbx_MeshID(tempobj.name)
 		
 		fw('\n\t\tPoseNode:  {')
 		fw('\n\t\t\tNode: %i' % tempname)
@@ -3113,29 +3036,36 @@ Objects:  {''')
 	#if 'CAMERA' in object_types:
 	#	write_camera_default()
 	
-	matcount = 1
+	# Materials
 	for matname, (mat, tex) in materials:
-		write_material(matname, mat, matcount)
-		matcount += 1
-
-	# each texture uses a video, odd
-	vidindex = 1
+		write_material(mat)
+	
+	# Videos
 	for texname, tex in textures:
-		write_video(texname, tex, vidindex)
-		vidindex += 1
-	i = 1
+		write_video(texname, tex)
+	
+	# Textures
 	for texname, tex in textures:
-		write_texture(texname, tex, i)
-		i += 1
+		write_texture(texname, tex)
+	
 	
 	# NOTE - c4d and motionbuilder dont need normalized weights, but deep-exploration 5 does and (max?) do.
 
 	# Write armature modifiers
-	deformerid = 800001
+	
+	# build skin deformer index:
 	for my_mesh in ob_meshes:
 		if my_mesh.fbxArm:
-			write_deformer_skin(my_mesh.fbxName, deformerid)
-			deformerid += 1
+			#me = my_mesh.blenData
+			exporter_data.index_fbxSkins.append(my_mesh.fbxName)
+			for my_bone in ob_bones:
+				if me in iter(my_bone.blenMeshes.values()):
+					exporter_data.index_fbxClusters.append(my_mesh.fbxName + '_' + my_bone.fbxName)
+			
+	for my_mesh in ob_meshes:
+		if my_mesh.fbxArm:
+			#me = my_mesh.blenData
+			write_deformer_skin(my_mesh.fbxName)
 			# Get normalized weights for temorary use
 			if my_mesh.fbxBoneParent:
 				weights = None
@@ -3145,8 +3075,7 @@ Objects:  {''')
 			#for bonename, bone, obname, bone_mesh, armob in ob_bones:
 			for my_bone in ob_bones:
 				if me in iter(my_bone.blenMeshes.values()):
-					write_sub_deformer_skin(my_mesh, my_bone, weights, deformerid)
-				deformerid += 1
+					write_sub_deformer_skin(my_mesh, my_bone, weights)
 	
 	# Blend shape Deformers
 	for my_mesh in ob_meshes:
@@ -3191,18 +3120,18 @@ Connections:  {''')
 			if my_ob.fbxParent and (not my_ob.fbxArm):
 				fw('\n\t;Model::%s, ' % my_ob.fbxName)
 				fw('Model::%s' % my_ob.fbxParent.fbxName)
-				fw('\n\tC: "OO",%i,' % get_fbx_GeomID(my_ob.blenObject))
-				fw('%i\n\t' % get_fbx_MeshID(my_ob.fbxParent.blenObject))
+				fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_GeomID(my_ob.blenObject.name))
+				fw('%i\n\t' % exporter_data.get_fbx_MeshID(my_ob.fbxParent.blenObject.name))
 			else:
 				if my_ob.fbxName != "Armature":
 					fw('\n\t;Model::%s, Model::RootNode' % my_ob.fbxName)
-					fw('\n\tC: "OO",%i,0\n\t' % get_fbx_MeshID(my_ob.blenObject))
+					fw('\n\tC: "OO",%i,0\n\t' % exporter_data.get_fbx_MeshID(my_ob.blenObject.name))
 	
 	# Root bone - RootNode
 	for my_bone in ob_bones:
 		if not my_bone.parent:
 			fw('\n\t;Model::%s, Model::RootNode' % my_bone.fbxName)
-			fw('\n\tC: "OO",%i,0\n\t' % get_fbx_BoneID(my_bone, ob_bones))
+			fw('\n\tC: "OO",%i,0\n\t' % exporter_data.get_fbx_BoneID(my_bone.fbxName))
 	
 	# Geometry - Model
 	for ob_generic in ob_all_typegroups:  # all blender 'Object's we support
@@ -3211,8 +3140,8 @@ Connections:  {''')
 				if my_ob.fbxName != "Armature":
 					fw('\n\t;Geometry::%s, ' % my_ob.fbxName)
 					fw('Model::%s' % my_ob.fbxName)
-					fw('\n\tC: "OO",%i,' % get_fbx_GeomID(my_ob.blenObject))
-					fw('%i\n\t' % get_fbx_MeshID(my_ob.blenObject))
+					fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_GeomID(my_ob.blenObject.name))
+					fw('%i\n\t' % exporter_data.get_fbx_MeshID(my_ob.blenObject.name))
 	
 	# Materials
 	if materials:
@@ -3223,8 +3152,8 @@ Connections:  {''')
 				tex_name = tex.name if tex else None
 				fw('\n\t;Material::%s, ' % mat_name)
 				fw('Model::%s' % my_mesh.fbxName)
-				fw('\n\tC: "OO",%i,' % get_fbx_MaterialID(mat, materials))
-				fw('%i\n\t' % get_fbx_MeshID(my_mesh.blenObject))
+				fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_MaterialID(mat.name))
+				fw('%i\n\t' % exporter_data.get_fbx_MeshID(my_mesh.blenObject.name))
 	
 	
 	if 'MESH' in object_types:
@@ -3242,10 +3171,10 @@ Connections:  {''')
 							len(my_mesh.blenObject.data.vertices) == len(me.vertices))
 			if do_shapekeys:
 				key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
-				geomid = get_fbx_GeomID(my_mesh.blenObject)
+				geomid = exporter_data.get_fbx_GeomID(my_mesh.blenObject.name)
 				fw('\n\t;Deformer::, Geometry::%s' % my_mesh.fbxName)
-				fw('\n\tC: "OO",%i,' % (geomid + 601000))
-				fw('%i\n\t' % geomid)
+				fw('\n\tC: "OO",%i,' % (geomid + 600000))
+				fw('%i\n\t' % exporter_data.get_fbx_GeomID(my_mesh.blenObject.name))
 			
 		
 		# Skin -> Geometry
@@ -3253,8 +3182,8 @@ Connections:  {''')
 			if my_mesh.fbxArm:
 				fw('\n\t;Deformer::Skin %s, ' % my_mesh.fbxName)
 				fw('Geometry::%s' % my_mesh.fbxName)
-				fw('\n\tC: "OO",%i,' % get_fbx_DeformerID(my_mesh, None, ob_meshes, ob_bones))
-				fw('%i\n\t' % get_fbx_GeomID(my_mesh.blenObject))
+				fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_DeformerSkinID(my_mesh.fbxName))
+				fw('%i\n\t' % exporter_data.get_fbx_GeomID(my_mesh.blenObject.name))
 		
 		
 		# ShapeChannel -> Shape
@@ -3272,12 +3201,12 @@ Connections:  {''')
 							len(my_mesh.blenObject.data.vertices) == len(me.vertices))
 			if do_shapekeys:
 				key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
-				shapeid = get_fbx_GeomID(my_mesh.blenObject)
+				shapeid = exporter_data.get_fbx_GeomID(my_mesh.blenObject.name)
 				for kb in key_blocks[1:]:
 					shapeid += 1
 					fw('\n\t;SubDeformer::%s, Deformer::' % kb.name)
-					fw('\n\tC: "OO",%i,' % (shapeid +  601000))
-					fw('%i\n\t' % (get_fbx_GeomID(my_mesh.blenObject) + 601000))
+					fw('\n\tC: "OO",%i,' % (shapeid +  610000))
+					fw('%i\n\t' % (exporter_data.get_fbx_GeomID(my_mesh.blenObject.name) + 600000))
 				
 		# ShapeGeometry -> ShapeChannel
 		'''
@@ -3294,13 +3223,13 @@ Connections:  {''')
 							len(my_mesh.blenObject.data.vertices) == len(me.vertices))
 			if do_shapekeys:
 				key_blocks = my_mesh.blenObject.data.shape_keys.key_blocks[:]
-				shapeid = get_fbx_GeomID(my_mesh.blenObject)
+				shapeid = exporter_data.get_fbx_GeomID(my_mesh.blenObject.name)
 				for kb in key_blocks[1:]:
 					shapeid += 1
 					fw('\n\t;Geometry::%s, ' % kb.name)
 					fw('SubDeformer::%s' % kb.name)
-					fw('\n\tC: "OO",%i,' % (shapeid + 1000))
-					fw('%i\n\t' % (shapeid+ 601000))
+					fw('\n\tC: "OO",%i,' % (shapeid + 10000))
+					fw('%i\n\t' % (shapeid+ 610000))
 		
 		
 		# Limb -> ParentLimb
@@ -3308,14 +3237,14 @@ Connections:  {''')
 			if my_bone.parent:
 				fw('\n\t;Model::%s, ' % my_bone.fbxName)
 				fw('Model::%s' % my_bone.parent.fbxName)
-				fw('\n\tC: "OO",%i,' % get_fbx_BoneID(my_bone, ob_bones))
-				fw('%i\n\t' % get_fbx_BoneID(my_bone.parent, ob_bones))
+				fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_BoneID(my_bone.fbxName))
+				fw('%i\n\t' % exporter_data.get_fbx_BoneID(my_bone.parent.fbxName))
 			
 			# NodeAttribute -> Limb
 			fw('\n\t;Attribute::%s, ' % my_bone.fbxName)
 			fw('Model::%s' % my_bone.fbxName)
-			fw('\n\tC: "OO",%i,' % get_fbx_BoneAttributeID(my_bone, ob_bones))
-			fw('%i\n\t' % get_fbx_BoneID(my_bone, ob_bones))
+			fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_BoneAttributeID(my_bone.fbxName))
+			fw('%i\n\t' % exporter_data.get_fbx_BoneID(my_bone.fbxName))
 			
 	
 	
@@ -3330,8 +3259,8 @@ Connections:  {''')
 				
 				fw('\n\t;SubDeformer::Cluster %s %s, ' % (fbxMeshObName, my_bone.fbxName))
 				fw('Deformer::Skin %s' % fbxMeshObName)
-				fw('\n\tC: "OO",%i,' % get_fbx_DeformerID(my_bone, tempMesh, ob_meshes, ob_bones))
-				fw('%i\n\t' % get_fbx_DeformerID(tempMesh, None, ob_meshes, ob_bones))
+				fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_DeformerClusterID(fbxMeshObName + '_' + my_bone.fbxName))
+				fw('%i\n\t' % exporter_data.get_fbx_DeformerSkinID(fbxMeshObName))
 		
 		# Limb - Cluster
 		for my_bone in ob_bones:
@@ -3343,8 +3272,8 @@ Connections:  {''')
 						
 				fw('\n\t;Model::%s, ' % my_bone.fbxName)
 				fw('SubDeformer::Cluster %s %s' % (fbxMeshObName, my_bone.fbxName))
-				fw('\n\tC: "OO",%i,' % get_fbx_BoneID(my_bone, ob_bones))
-				fw('%i\n\t' % get_fbx_DeformerID(my_bone, tempObj, ob_meshes, ob_bones))
+				fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_BoneID(my_bone.fbxName))
+				fw('%i\n\t' % exporter_data.get_fbx_DeformerClusterID(fbxMeshObName + '_' + my_bone.fbxName))
 	
 	if materials:
 		if textures:
@@ -3355,16 +3284,16 @@ Connections:  {''')
 					tex_name = tex.name if tex else None
 					fw('\n\t;Texture::%s, ' % tex_name)
 					fw('Material::%s' % mat_name)
-					fw('\n\tC: "OO",%i,' % get_fbx_TextureID(tex, textures))
-					fw('%i\n\t' % get_fbx_MaterialID(mat, materials))
+					fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_TextureID(tex.name))
+					fw('%i\n\t' % exporter_data.get_fbx_MaterialID(mat.name))
 	
 	# Video - Texture
 	if textures:
 		for texname, tex in textures:
 			fw('\n\t;Video::%s, ' % tex.name)
 			fw('Texture::%s' % tex.name)
-			fw('\n\tC: "OO",%i,' % get_fbx_VideoID(tex, textures))
-			fw('%i\n\t' % get_fbx_TextureID(tex, textures))
+			fw('\n\tC: "OO",%i,' % exporter_data.get_fbx_VideoID(tex.name))
+			fw('%i\n\t' % exporter_data.get_fbx_TextureID(tex.name))
 	
 	# groups
 	if groups:
@@ -3374,6 +3303,7 @@ Connections:  {''')
 					fw('\n\tConnect: "OO", "Model::%s", "GroupSelection::%s"' % (ob_base.fbxName, fbxGroupName))
 
 	fw('\n}')
+	
 	
 	
 	#######################################################
@@ -3677,27 +3607,13 @@ Takes:  {''')
 		fw('\n\tCurrent: ""')
 		fw('\n}')
 
-	# write meshes animation
-	#for obname, ob, mtx, me, mats, arm, armname in ob_meshes:
-
+	
 	# Clear mesh data Only when writing with modifiers applied
 	for me in meshes_to_clear:
 		bpy.data.meshes.remove(me)
-
-	# --------------------------- Footer
-	if world:
-		m = world.mist_settings
-		has_mist = m.use_mist
-		mist_intense = m.intensity
-		mist_start = m.start
-		mist_end = m.depth
-		# mist_height = m.height  # UNUSED
-		world_hor = world.horizon_color
-	else:
-		has_mist = mist_intense = mist_start = mist_end = 0
-		world_hor = 0, 0, 0
-
+	
 	fw('\n')
+	
 	
 	# XXX, shouldnt be global!
 	for mapping in (sane_name_mapping_ob,
