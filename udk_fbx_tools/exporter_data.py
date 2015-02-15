@@ -7,7 +7,7 @@
 	Numbering:
 	
 	0 			= RootNode
-	10 			= GlobalSettings
+	10 			= Document
 	100 		= Pose
 	
 	10xxxx 		= Geometry

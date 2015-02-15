@@ -1899,10 +1899,38 @@ References:  {
 		collayers = []
 		if len(me.tessface_vertex_colors):
 			collayers = me.tessface_vertex_colors
-			for colindex, collayer in enumerate(collayers):
-				fw('\n\t\tLayerElementColor: %i {' % colindex)
+			
+			if merge_vertexcollayers:
+				newvcols = []
+				finalvcols = []
+				totalcolcount = 0
+				for collayer in collayers:
+					newvcols = []
+					totalcolcount = 0
+					findex = 0
+					for cf in collayer.data:
+						totalcolcount += len(me_faces[findex].vertices)
+						
+						newvcols.append(cf.color1)
+						newvcols.append(cf.color2)
+						newvcols.append(cf.color3)
+						if len(me_faces[findex].vertices) == 4:
+							newvcols.append(cf.color4)
+						
+						findex += 1
+					
+					tempcount = 0
+					for cc in newvcols:
+						if len(finalvcols) < len(newvcols):
+							finalvcols.append(cc)
+						else:
+							finalvcols[tempcount] = cc + finalvcols[tempcount]
+						
+						tempcount += 1
+							
+				fw('\n\t\tLayerElementColor: 0 {')
 				fw('\n\t\t\tVersion: 101')
-				fw('\n\t\t\tName: "%s"' % collayer.name)
+				fw('\n\t\t\tName: "colscombined"')
 				fw('''
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
@@ -1910,24 +1938,18 @@ References:  {
 				
 				i = -1
 				ii = 0  # Count how many Colors we write
-				print(len(me_faces), len(collayer.data))
-				for fi, cf in enumerate(collayer.data):
-					if len(me_faces[fi].vertices) == 4:
-						colors = cf.color1[:], cf.color2[:], cf.color3[:], cf.color4[:]
+				
+				for col in finalvcols:
+					if i == -1:
+						fw('%.4f,%.4f,%.4f,1' % (col[0], col[1], col[2]))
+						i = 0
 					else:
-						colors = cf.color1[:], cf.color2[:], cf.color3[:]
-					
-					for col in colors:
-						if i == -1:
-							fw('%.4f,%.4f,%.4f,1' % col)
+						if i == 7:
+							fw('\n\t\t\t\t')
 							i = 0
-						else:
-							if i == 7:
-								fw('\n\t\t\t\t')
-								i = 0
-							fw(',%.4f,%.4f,%.4f,1' % col)
-						i += 1
-						ii += 1  # One more Color
+						fw(',%.4f,%.4f,%.4f,1' % (col[0], col[1], col[2]))
+					i += 1
+					ii += 1  # One more Color
 				
 				fw('\n\t\t\tColorIndex: ')
 				i = -1
@@ -1942,6 +1964,55 @@ References:  {
 						fw(',%i' % j)
 					i += 1
 				fw('\n\t\t}')
+				collayers = [collayers[0]]
+				
+			else:
+			
+			
+			
+				for colindex, collayer in enumerate(collayers):
+					fw('\n\t\tLayerElementColor: %i {' % colindex)
+					fw('\n\t\t\tVersion: 101')
+					fw('\n\t\t\tName: "%s"' % collayer.name)
+					fw('''
+				MappingInformationType: "ByPolygonVertex"
+				ReferenceInformationType: "IndexToDirect"
+				Colors: ''')
+					
+					i = -1
+					ii = 0  # Count how many Colors we write
+					print(len(me_faces), len(collayer.data))
+					for fi, cf in enumerate(collayer.data):
+						if len(me_faces[fi].vertices) == 4:
+							colors = cf.color1[:], cf.color2[:], cf.color3[:], cf.color4[:]
+						else:
+							colors = cf.color1[:], cf.color2[:], cf.color3[:]
+						
+						for col in colors:
+							if i == -1:
+								fw('%.4f,%.4f,%.4f,1' % col)
+								i = 0
+							else:
+								if i == 7:
+									fw('\n\t\t\t\t')
+									i = 0
+								fw(',%.4f,%.4f,%.4f,1' % col)
+							i += 1
+							ii += 1  # One more Color
+					
+					fw('\n\t\t\tColorIndex: ')
+					i = -1
+					for j in range(ii):
+						if i == -1:
+							fw('%i' % j)
+							i = 0
+						else:
+							if i == 55:
+								fw('\n\t\t\t\t')
+								i = 0
+							fw(',%i' % j)
+						i += 1
+					fw('\n\t\t}')
 		
 		# Write UV and texture layers.
 		uvlayers = []

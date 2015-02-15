@@ -1,52 +1,46 @@
 Blender -> UE 3/4 FBX Tools
 
 Blender addon that adds an editor for custom vertex normals, and an exporter with some tweaks and optimizations specific to the Unreal engine.
-
-The exporter can also calculate tangents and binormals on export, allowing you to take advantage of the xNormal - UDK synced workflow using Blender.
-
-
-
-*Compatible with Blender v2.70+*
-
-
-A lot of this readme is obselete for version 1.0.0
-
-
-_*1.0.0 Notes:*_
-
-- Optional: You'll need Vrav's Transfer Vertex Normals addon for the new Transfer Normals option. It's available at:
-http://blenderartists.org/forum/showthread.php?259554-Addon-EditNormals-Transfer-Vertex-Normals&s=33911f74a3f9a2250b1645e4cda304a8
-
-
-- The normals editor ui has been redesigned, and the readme has not yet been updated :D
-
-- To export files with the 7.3 exporter, select 'Use FBX 2013' from the export menu.
-
-- The new FBX 7.3 exporter should be able to export everything except animations at the moment.
-
-- The importer currently works with FBX 6.1 files only.
-
-- 'Merge Vertex Colors' does nothing at the moment.
-
-
-
-- Auto Generation and 3D Line Display should now work in both Edit and Object modes. 
- 
-- Remaining mode limitations:
-  - Object mode is required to use the Transfer function
-  - Edit Mode is required for manual editing (for obvious reasons) 
- 
-- Minor changes to data structure used for normals:
-  - Removed face center and vert position data.
-  - Older files should still be compatible. 
  
  
  
-Editor:
+*Compatible with Blender v2.70+* 
+ 
+_* A lot of this readme is obselete for version 1.0.0 *_ 
+ 
+ 
+========================================================================================================= 
+ 
+*Installation:* 
+ 
+- Copy the 'udk_fbx_tools' folder to your addons directory.
+- Find it in the Addon Manager in the 'Mesh' category as 'UE FBX Normals Tools' and enable it.
+- There should be a new tab named 'Normals Editor' under 'Shading / UVs' in your tools panel. 
+ 
+========================================================================================================= 
+ 
+_*Notes:*_ 
+ 
+ 
+_*v1.0.0 Test Releases:*_ 
+ 
+*Editor:* 
+ 
+- The normals editor ui has been redesigned, and the documentation has not yet been updated :D 
+ 
+- The export/import buttons have been moved to the standard export and import menus. 
+ 
+- Auto Generation and 3D Line Display should now work in both Edit and Object modes.
+  - Remaining mode limitations:
+    - Object mode is required to use the Transfer function
+    - Edit Mode is required for manual editing (for obvious reasons) 
+ 
+- *Optional but extremely useful*: You'll need Vrav's Transfer Vertex Normals addon for the new Transfer Normals function. It's available at:
+  - http://blenderartists.org/forum/showthread.php?259554-Addon-EditNormals-Transfer-Vertex-Normals&s=33911f74a3f9a2250b1645e4cda304a8 
+ 
 - Custom normals can't be applied visually with shape keys or active modifiers.
   - They can still be edited, exported and displayed as lines. 
  
-Exporter:
 - When using poly mode (split) custom normals, the mesh must be triangulated before editing custom normals.
   - Vertex mode custom normals are not affected by triangulation and should export correctly after doing so. 
  
@@ -58,84 +52,90 @@ Exporter:
   - Bones without deform enabled will have weird scales and rotations.
   - This is relevant for applications that require the use of end bones.
   - Planned integration of leaf bone changes from the new official exporter should fix this. 
-
-
---------------------------------------------------------------------------------
-
-*Installation:*
-
-- Copy the 'udk_fbx_tools' folder to your addons directory. 
-- Find it in the Addon Manager in the 'Mesh' category as 'UE FBX Normals Tools' and enable it. 
-- There should be a new tab named 'Normals Editor' under 'Shading / UVs' in your tools panel. 
-
-
--------------------------------------------------------------------------------
-
-*Notes:*
-
+ 
+ 
+*Exporter:* 
+ 
+- To export files with the 7.3 exporter, select 'Use FBX 2013' in the export panel.
+  - The new FBX 7.3 exporter should be able to export everything except animations at the moment. 
+ 
+- The importer currently works with FBX 6.1 files only. 
+ 
+- New feature: Merge Vertex Colors:
+  - Selecting this during export will export one vertex color layer consisting of all layers combined
+  - This makes exporting vertex colors for wind effects and such easier. 
+ 
+ 
+*Both:* 
+ 
+- Minor changes to data structure used for normals:
+  - Removed face center and vert position data.
+  - Older files should still be compatible. 
+ 
+ 
+*Displaying Normals on Meshes:* 
 - Normals can be applied to the mesh in Vertex Mode, but not in Poly Mode. Both modes support displaying normals as 3D lines.
-  - The mesh's displayed normals will reset every time you enter Blender's Edit Mode, and can be reset by clicking _Apply to Mesh_ again.
-
-*Export Time* 
-- Exporting Tangents and custom normals can take 2-4 times as long as default export modes (after lots of optimizations :D ) 
-- Blender may freeze for a few seconds on complex meshes.
-
-
-*Editing Performance* 
-I've tested this on meshes with up to 150000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 760),
-real-time display of normals is slow on anything past 25000 or so polys, depending on the mesh's
-density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts.
-
-
+- The mesh's displayed normals will reset every time you enter Blender's Edit Mode, and can be reset by clicking _Apply to Mesh_ again.
+ 
+ 
+*Export Time:* 
+- Exporting Tangents and custom normals can take 2-4 times as long as default export modes (after lots of optimizations).
+- Blender may freeze for a few seconds on complex meshes. 
+ 
+ 
+*Editing Performance:* 
+- I've tested the normals editor on meshes with up to 150000 polys.
+- On my mid-range system, real-time display of normals is slow on anything past 25000 or so vertices.
+- Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts.
+ 
+ 
 *Tangents and Unreal Engine 4:*
-- The custom tangents generated by this addon looked OK in UE4 in my initial tests, but after some experiments with Mikk Tspace (which UE4 uses natively) it turns out that there is a slight difference in shading
-compared to UE4's automatically generated tangents.
-- I've added the option to export Blender's tangents which should be more correct but have the drawback of not working with custom normals.
+- After some experiments with Mikk TSpace (which UE4 uses natively) it turns out that there is a slight difference in shading compared to UE4's automatically generated tangents.
+- I've added the option to export Blender's tangents which should be closer (or identical, in theory) but have the drawback of not working with custom normals. 
+ 
+========================================================================================================= 
 
-==================================================================================
-
-*Features:*
-
-_Editor for Vertex Normals:_
-
-- Manual editing per poly or vertex normals 
-- Automatic generation with several presets for different scenarios 
-  - presets: (More advanced presets for foliage/tree normals should be up soon) 
-    - *Smooth* (Blender default) 
-    - *Vector* 
-    - *Bent* (facing away from 3d cursor by an adjustable ratio) 
-    - *Ground Foliage* (selected ground based vertices point up, everything else bent from an offset point) 
-    - *Custom* (similar to Blender's default normals with the ability to generate normals for selected faces as if they are disconnected) 
-- Allows calculating normals for selected faces or the whole mesh 
-- Normals can be displayed as lines for visual editing or applied to the mesh if in vertex mode
-- copy/paste selected normals between meshes with identical vert locations (buggy/wip, but fixes modular mesh seams when it works) 
-
-
-_Customized FBX Exporter:_
-
-- Can calculate and export tangents and binormals 
-- Can export custom normals from the included editor 
-- Support to export normals generated by asdn's Recalc Vertex Normals addon 
-- Unreal Engine 3/4-specific optimizations: 
-  - root bone fix that removes the armature bone from the exported file 
-    - root bone is now parented to the scene to stop weirdness with some software and UE physics 
-    - this fix also allows mesh orientations to be exported without having to mess around with the axis settings 
+*Features:* 
+ 
+_Editor for Vertex Normals:_ 
+ 
+- Manual editing per poly or vertex normals
+- Automatic generation with several presets for different scenarios
+  - presets: (More advanced presets for foliage/tree normals should be up soon)
+    - *Smooth* (Blender default)
+    - *Vector*
+    - *Bent* (facing away from 3d cursor by an adjustable ratio)
+    - *Ground Foliage* (selected ground based vertices point up, everything else bent from an offset point)
+    - *Custom* (similar to Blender's default normals with the ability to generate normals for selected faces as if they are disconnected)
+- Allows calculating normals for selected faces or the whole mesh
+- Normals can be displayed as lines for visual editing or applied to the mesh if in vertex mode 
+ 
+ 
+_Customized FBX Exporter:_ 
+ 
+- Can calculate and export tangents and binormals
+- Can export custom normals from the included editor
+- Support to export normals generated by asdn's Recalc Vertex Normals addon
+- Unreal Engine 3/4-specific optimizations:
+  - root bone fix that removes the armature bone from the exported file
+    - root bone is now parented to the scene to stop weirdness with some software and UE physics
+    - this fix also allows mesh orientations to be exported without having to mess around with the axis settings
   - new option to export default tangents (when using default normals)
   - custom tangents are pretty close to UDK's
-- Exported meshes should now be fully compatible with nvidia's Apex Tools, xNormal and most other software that uses the FBX format 
+- Exported meshes should now be fully compatible with nvidia's Apex Tools, xNormal and most other software that uses the FBX format
   - (previous versions caused crashes on import for some software) 
-	
-
-_Importer for Normals:_
-
-- Allows importing normals from FBX files to the custom variable used in this editor. 
-- Works with multiple meshes at the same time. 
+ 
+ 
+_Importer for Normals (FBX 6.1 files only):_ 
+ 
+- Allows importing normals from FBX files to the custom variable used in this editor.
+- Works with multiple meshes at the same time.
 - The meshes have to already exist in the scene and be identical to the ones in the file (same number of vertices and faces). 
-
-
----------------------------------------------------------------------------------------------
-
-*Documentation:*
+ 
+ 
+========================================================================================================= 
+ 
+*Documentation:* 
 
 
 _*Main Panel:*_
@@ -157,7 +157,7 @@ _*Main Panel:*_
 *Clear* 					
 - Deletes custom mesh data
 
-----------------------------------------------------------------------------------------
+========================================================================================================= 
 
 *Vertex Normals Editor:*
 
@@ -238,7 +238,7 @@ This can be used to reduce seams on modular character meshes and copy sharp edge
 *Display:* 
 - Options for drawing lines to represent the vertex normals (color, scale, selection only) 
 
-----------------------------------------------------------------------------------------------
+========================================================================================================= 
 
 *Exporter:*
 
@@ -265,38 +265,50 @@ Altered export settings:
 
 
 
-=========================================================================================================
+========================================================================================================= 
 Reference for tangent space calculation:
 
 Lengyel, Eric. “Computing Tangent Space Basis Vectors for an Arbitrary Mesh”. Terathon Software 3D Graphics Library, 2001. http://www.terathon.com/code/tangent.html
 
 
 
-=========================================================================================================
+========================================================================================================= 
 Changelog: 
 
-_(not counting the ridiculous amount of edits after each update)_
 
 
-*1.0.0t3*
-
-- massive performance improvement to normals editor code by switching to a temp list for calculations/display
-
-
-
-*1.0.0t2*
-
+*1.0.0t5* (current) 
+ 
+- fixed problem with previous release that broke skeletal mesh exports
+- added ability to export combined vertex color layer
+- readme updates 
+ 
+ 
+*1.0.0t4* 
+ 
+- added object mode support to Auto Generate and Display functions
+- initial indexing system for FBX 7.3 files
+- code formatting + UI optimizations
+ 
+ 
+*1.0.0t3* 
+ 
+- massive performance improvement to normals editor code by switching to a temp list for calculations/display 
+ 
+ 
+*1.0.0t2* 
+ 
 - added partially working fbx 7.3 exporter
-- changed organization of 6.1 output files + added some exported variables
-
-
-*1.0.0t1*
-
+- changed organization of 6.1 output files + added some exported variables 
+ 
+ 
+*1.0.0t1* 
+ 
 - removed redundant class for vertexn_meshdata list, switched to vert_data type
 - moved import/export buttons to proper menus
 - reorganized interface to decrease clutter
-- fixed long-running typo of adsn's name :D
-
+- fixed long-running typo of adsn's name :D 
+ 
 - *exporter*:
 - updated export scaling to a more standard method (not using local scaling)
 - minor changes to previous armature axis settings fix (cleaner)
@@ -305,60 +317,61 @@ _(not counting the ridiculous amount of edits after each update)_
 - refactored + optimized custom tangent calculation method
   - performance improvements for exporting custom tangents (should be much faster now)
 - added the ability to pick the UV layer tangents are based on (1 layer max)
-- added warning messages + fallbacks to prevent the exporter from stopping when it encounters a problem
-
+- added warning messages + fallbacks to prevent the exporter from stopping when it encounters a problem 
+  
 - *editor*:
 - added ability to use Vrav's Transfer Vertex Normals addon from editor
-  - this replaces copy/paste functionality
-
-
-*0.10.1*
-
+  - this replaces copy/paste functionality 
+ 
+ 
+*0.10.1* 
+ 
 - *exporter*:
 - fixed scaling for static mesh exports, not working properly for armatures at the moment
 - the exporter now detects the root bone of any parented armature, removing the need to manually enter root bone name
 - fixed an export error that occured when exporting a mesh twice (the normals list was getting cleared if in vertex mode)
 - *editor*:
-- fixed Default auto-generation method
-
-
-*0.10.0*
-
+- fixed Default auto-generation method 
+ 
+ 
+*0.10.0* 
+ 
 - replaced broken init file (Blender should recognize the addon again)
 - added ability to switch between per-poly and vertex normals in editor
 - added ability to apply normals to mesh (vertex mode only, no split normals)
 - rewrote Custom auto-generation mode (much faster now, and less likely to produce bad results)
 - added bending ratio to Bent auto-generation mode
 - rewrote copy/paste functionality
-- various fixes to armature export
-
-
-*0.9.0*
-
+- various fixes to armature export 
+ 
+ 
+*0.9.0* 
+ 
 - added importer for normals only
 - *exporter:*
 - more exporter performance improvements
 - changed the way normals etc are exported
-- removed vertex sorting stuff from normals export since it should all be handled by the editor now
-
-
-*0.8.0*
-
+- removed vertex sorting stuff from normals export since it should all be handled by the editor now 
+ 
+ 
+*0.8.0* 
+ 
 - *exporter:*
 - rewrote the armature bone fix to parent the root bone to the scene (the way the armature object was before)
   - exported files should now be compatible with nvidia apex tools and anything else that uses fbx
   - no more messing with UDK's imported mesh rotations
 - changed the way axis settings are handled during export and set up separate axis options
-- exporter speed improvements
-
-
-*0.7.5*
-
+- exporter speed improvements 
+ 
+ 
+*0.7.5* 
+ 
 - *editor:*
-- fixed Custom (Angle-Based) auto-generation mode. It's slightly slower (as in, it can take about 5 min for a 3600 poly mesh), but should no longer produce weird results on complex meshes.
+- fixed Custom (Angle-Based) auto-generation mode. 
+  - It's slightly slower (as in, it can take about 5 min for a 3600 poly mesh), but should no longer produce weird results on complex meshes.
 - fixed wrong vertex being selected while using manual edit (bad math)
 - *exporter:*
-- added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior)
+- added check for UV layer before calculating tangents. If not found, the mesh is exported without tangents (default behavior) 
 
 
 *0.7.0*
