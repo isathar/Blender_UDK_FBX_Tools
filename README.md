@@ -32,31 +32,31 @@ http://blenderartists.org/forum/showthread.php?259554-Addon-EditNormals-Transfer
 
 - Auto Generation and 3D Line Display should now work in both Edit and Object modes. 
  
-- Remaining mode limitations: 
-  - Object mode is required to use the Transfer function 
+- Remaining mode limitations:
+  - Object mode is required to use the Transfer function
   - Edit Mode is required for manual editing (for obvious reasons) 
  
-- Minor changes to data structure used for normals: 
-  - Removed face center and vert position data. 
+- Minor changes to data structure used for normals:
+  - Removed face center and vert position data.
   - Older files should still be compatible. 
  
  
  
-Editor: 
-- Custom normals can't be applied visually with shape keys or active modifiers. 
+Editor:
+- Custom normals can't be applied visually with shape keys or active modifiers.
   - They can still be edited, exported and displayed as lines. 
  
-Exporter: 
-- When using poly mode (split) custom normals, the mesh must be triangulated before editing custom normals. 
+Exporter:
+- When using poly mode (split) custom normals, the mesh must be triangulated before editing custom normals.
   - Vertex mode custom normals are not affected by triangulation and should export correctly after doing so. 
  
-- Exporting with default tangents requires default normals and a triangulated mesh. 
-  - Without triangulation, one face will be reversed/split in the output. 
+- Exporting with default tangents requires default normals and a triangulated mesh.
+  - Without triangulation, one face will be reversed/split in the output.
   - The exporter will not export tangents if default tangents are selected with custom or automatic normals. 
  
-- All bones in the armature must have deform enabled when using custom scale or axis settings with a skeletal mesh. 
-  - Bones without deform enabled will have weird scales and rotations. 
-  - This is relevant for applications that require the use of end bones. 
+- All bones in the armature must have deform enabled when using custom scale or axis settings with a skeletal mesh.
+  - Bones without deform enabled will have weird scales and rotations.
+  - This is relevant for applications that require the use of end bones.
   - Planned integration of leaf bone changes from the new official exporter should fix this. 
 
 
@@ -77,13 +77,13 @@ Exporter:
   - The mesh's displayed normals will reset every time you enter Blender's Edit Mode, and can be reset by clicking _Apply to Mesh_ again.
 
 *Export Time* 
-Exporting Tangents can be pretty slow. I've sped the script up a lot since the initial release, but it can stil take some time on complex meshes.
-Blender may hitch or freeze while exporting, but shouldn't crash.
+- Exporting Tangents and custom normals can take 2-4 times as long as default export modes (after lots of optimizations :D ) 
+- Blender may freeze for a few seconds on complex meshes.
 
 
 *Editing Performance* 
-I've tested this on meshes with between 6 and 60000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 760),
-real-time display of normals and my custom angle-based generation algorithm are slow on anything past 25000 or so polys, depending on the mesh's
+I've tested this on meshes with up to 150000 polys. On my mid-range system (Intel i5-2500 with 8GB of RAM and a Geforce 760),
+real-time display of normals is slow on anything past 25000 or so polys, depending on the mesh's
 density. Checking "Selected Only" in the display section of each tool helps, but will slow things down more as you approach higher counts.
 
 
