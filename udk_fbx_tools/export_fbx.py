@@ -17,27 +17,37 @@
 # ##### END GPL LICENSE BLOCK #####
 
 
-############
+
 # NOTES:
 #
 # based on the fbx export script included in < Blender v2.68 (6.1 ASCII)
 # original script created by and copyright (c) Campbell Barton
 #
+#
 # Changes by isathar:
 #
-# - tangent + binormal calculation based on Lengyel's Method
-# - custom normals support for fbx normals editor and asdn's Recalc Vertex Normals addon
+# - tangent + binormal calculation (*)
+# - custom normals support for fbx normals editor and adsn's Recalc Vertex Normals addon
 # - Normals are exported as PerPolyVertex
 # - list lookup speed optimizations
 # - XNA tweaks disabled for now
+# - some changes to the organization of exported files
+# -- based on fbx converter output
 #
 #  UE-specific:
-# - uses b_root as root bone instead of creating a new one from Armature
-#	- some changes made to rotation handling to accommodate for this
+# - for armatures: root bone is parented to the scene instead of an armature object
+# - some changes made to rotation handling to accommodate for this
 # - axis conversion options altered
 # - tangent space close to UDK's auto-generated tangents
 #
-##############
+#
+# (*) Tangent space calculation based on:
+# Lengyel, Eric. “Computing Tangent Space Basis Vectors for an Arbitrary Mesh”. Terathon Software 3D Graphics Library, 2001. 
+# http://www.terathon.com/code/tangent.html
+#
+# Bugs:
+# - mirrored UVs are not handled correctly in either tangent export mode
+
 
 
 import os
@@ -239,6 +249,8 @@ def save_single(operator, scene, filepath="",
 		mesh_smooth_type='FACE',
 		normals_export_mode='AUTO',
 		export_tangentspace_base='NONE',
+		tangentspace_uvlnum=0,
+		merge_vertexcollayers=False,
 		use_armature_deform_only=False,
 		use_anim=False,
 		use_anim_optimize=False,
@@ -255,6 +267,9 @@ def save_single(operator, scene, filepath="",
 	# Used for mesh and armature rotations
 	mtx4_z90 = Matrix.Rotation(math.pi / 2.0, 4, 'Z')
 	# Rotation does not work for XNA animations.  I do not know why but they end up a mess! (JCB)
+	
+	# UE rotation matrix adjustment
+	mtx4_y90 = Matrix.Rotation(math.pi / 2.0, 4, 'Y')
 	
 	if global_matrix is None:
 		global_matrix = Matrix()
@@ -350,7 +365,7 @@ def save_single(operator, scene, filepath="",
 
 			if not self.parent:
 				# UE Rotation fix
-				return self.getPoseMatrix(frame) * mtx4_z90 * Matrix.Rotation(math.pi / 2.0, 4, 'Y')
+				return self.getPoseMatrix(frame) * mtx4_z90 * mtx4_y90
 			else:
 				#return (mtx4_z90 * ((self.getPoseMatrix(frame) * arm_mat)))  *  (mtx4_z90 * (self.parent.getPoseMatrix(frame) * arm_mat)).inverted()
 				return (self.parent.getPoseMatrix(frame) * mtx4_z90).inverted() * ((self.getPoseMatrix(frame)) * mtx4_z90)
@@ -451,7 +466,8 @@ def save_single(operator, scene, filepath="",
 	# ---------------------------- Write the header first
 	fw(header_comment)
 	curtime = time.localtime()[0:6]
-	#
+	
+	# moved creation time + creator into header
 	fw(
 '''FBXHeaderExtension:  {
 	FBXHeaderVersion: 1003
@@ -466,15 +482,28 @@ def save_single(operator, scene, filepath="",
 		Second: %.2i
 		Millisecond: 0
 	}
-	Creator: "FBX SDK/FBX Plugins build 20070228 (customized)"
-	OtherFlags:  {
-		FlagPLE: 0
-	}
-}''' % (curtime))
+''' % (curtime))
+	fw(
+'''	Creator: "FBX Custom 6.1 - Blender %s"
+}''' % (bpy.app.version_string))
+	
+	# Document description - not really part of header, but close to the start
+	fw(
+'''
 
-	fw('\nCreationTime: "%.4i-%.2i-%.2i %.2i:%.2i:%.2i:000"' % curtime)
-	fw('\nCreator: "Blender version %s"' % bpy.app.version_string)
+; Document Description
+;------------------------------------------------------------------
 
+Document:  {
+	Name: ""
+}
+
+; Document References
+;------------------------------------------------------------------
+
+References:  {
+}''')
+	
 	pose_items = []  # list of (fbxName, matrix) to write pose data for, easier to collect along the way
 
 	# --------------- funcs for exporting
@@ -483,11 +512,11 @@ def save_single(operator, scene, filepath="",
 		Matrix mod is so armature objects can modify their bone matrices
 		"""
 		if isinstance(ob, bpy.types.Bone):
-			# UE - specific rotation fix - will probably mess up custom axis settings, still testing
+			# UE rotation fix (root bone)
 			if not ob.parent:
-				matrix = ob.matrix_local * mtx4_z90 * Matrix.Rotation(math.pi / 2.0, 4, 'Y')
+				matrix = ob.matrix_local * mtx4_z90 * mtx4_y90
 			else:
-				matrix = ob.matrix_local * mtx4_z90 
+				matrix = ob.matrix_local * mtx4_z90
 			
 			# no rotation changes needed here since root bone's rotation is applied to rest of skeleton
 			parent = ob.parent
@@ -544,11 +573,9 @@ def save_single(operator, scene, filepath="",
 		"""
 		loc, rot, scale, matrix, matrix_rot = object_tx(ob, loc, matrix, matrix_mod)
 		
-		tempScale = (scale[0] * global_scale, scale[1] * global_scale, scale[2] * global_scale)
-		
 		fw('\n\t\t\tProperty: "Lcl Translation", "Lcl Translation", "A+",%.15f,%.15f,%.15f' % loc)
 		fw('\n\t\t\tProperty: "Lcl Rotation", "Lcl Rotation", "A+",%.15f,%.15f,%.15f' % tuple_rad_to_deg(rot))
-		fw('\n\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%.15f,%.15f,%.15f' % tempScale)
+		fw('\n\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%.15f,%.15f,%.15f' % scale)
 		return loc, rot, scale, matrix, matrix_rot
 
 	def get_constraints(ob=None):
@@ -729,7 +756,8 @@ def save_single(operator, scene, filepath="",
 		   '\n\t\tShading: Y'
 		   '\n\t\tCulling: "CullingOff"'
 		   '\n\t\tTypeFlags: "Skeleton"'
-		   '\n\t}'
+		   '\n\t\tNodeAttributeName: "NodeAttribute::%s"'
+		   '\n\t}' % (my_bone.fbxName + '_ncl1_1')
 		   )
 
 	def write_camera_switch():
@@ -1100,21 +1128,28 @@ def save_single(operator, scene, filepath="",
 
 		fw('\n\t\tTypeFlags: "%s"' % fbxTypeFlags)
 		fw('\n\t}')
-
+	
 	# Material Settings
 	if world:
 		world_amb = world.ambient_color[:]
 	else:
 		world_amb = 0.0, 0.0, 0.0  # default value
-
+	
 	def write_material(matname, mat):
-		fw('\n\tMaterial: "Material::%s", "" {' % matname)
-
+		mat_cols = mat_cold = 0.8, 0.8, 0.8
+		mat_colamb = 0.0, 0.0, 0.0
+		mat_dif = 1.0
+		mat_amb = 0.5
+		mat_hard = 20.0
+		mat_spec = 0.2
+		mat_alpha = 1.0
+		mat_emit = 0.0
+		mat_shadeless = False
+		mat_shader = 'Phong'
 		# Todo, add more material Properties.
 		if mat:
 			mat_cold = tuple(mat.diffuse_color)
 			mat_cols = tuple(mat.specular_color)
-			#mat_colm = tuple(mat.mirCol) # we wont use the mirror color
 			mat_colamb = world_amb
 
 			mat_dif = mat.diffuse_intensity
@@ -1131,19 +1166,9 @@ def save_single(operator, scene, filepath="",
 					mat_shader = 'Lambert'
 				else:
 					mat_shader = 'Phong'
-		else:
-			mat_cols = mat_cold = 0.8, 0.8, 0.8
-			mat_colamb = 0.0, 0.0, 0.0
-			# mat_colm
-			mat_dif = 1.0
-			mat_amb = 0.5
-			mat_hard = 20.0
-			mat_spec = 0.2
-			mat_alpha = 1.0
-			mat_emit = 0.0
-			mat_shadeless = False
-			mat_shader = 'Phong'
-
+		
+		#write
+		fw('\n\tMaterial: "Material::%s", "" {' % matname)
 		fw('\n\t\tVersion: 102')
 		fw('\n\t\tShadingModel: "%s"' % mat_shader.lower())
 		fw('\n\t\tMultiLayer: 0')
@@ -1183,7 +1208,7 @@ def save_single(operator, scene, filepath="",
 	# tex is an Image (Arystan)
 	def write_video(texname, tex):
 		# Same as texture really!
-		fw('\n\tVideo: "Video::%s", "Clip" {' % texname)
+		fw('\n\tVideo: "Video::%s", "Clip" {' % (texname + '_ncl1_1'))
 
 		fw('''
 		Type: "Clip"
@@ -1295,11 +1320,9 @@ def save_single(operator, scene, filepath="",
 
 		fw('''
 		Version: 100
-		MultiLayer: 0
-		Type: "Cluster"
 		Properties60:  {
-			Property: "SrcModel", "object", ""
 			Property: "SrcModelReference", "object", ""
+			Property: "SrcModel", "object", ""
 		}
 		UserData: "", ""''')
 
@@ -1366,55 +1389,29 @@ def save_single(operator, scene, filepath="",
 		fw('\n\t}')
 	
 	
+	
 	#		Calculate uv direction for tangent space:
-	# tris or quads required + uvs must be properly mapped to vertices
-	# derived from Lengyel’s Method (http://www.terathon.com/code/tangent.html)
+	# - tris required (kind of... half of each face is not considered in
+	# calculation if using quads but tangents still turn out ok if engine triangulation is close enough)
+	# - uvs must be properly mapped to vertices
 	def calc_uvtanbase(uvpoly, polyverts):
-		uv1 = Vector(uvpoly[0])
-		uv2 = Vector(uvpoly[1])
-		uv3 = Vector(uvpoly[2])
-		
-		v1 = Vector(polyverts[0])
-		v2 = Vector(polyverts[1])
-		v3 = Vector(polyverts[2])
-		
 		# get uv distances
-		uv_distBA = uv2 - uv1
-		uv_distCA = uv3 - uv1
-		
+		uv_dBA = uvpoly[1] - uvpoly[0]
+		uv_dCA = uvpoly[2] - uvpoly[0]
 		# get point distances
-		p_distBA = v2 - v1
-		p_distCA = v3 - v1
-		
-		# calculate face direction * weight
-		area = (uv_distBA[0] * uv_distCA[1]) - (uv_distBA[1] * uv_distCA[0])
-		
-		tangentdir = Vector((0.0,0.0,0.0))
-		tangentdir[0] = ((uv_distCA[1] * p_distBA[0]) - (uv_distBA[1] * p_distCA[0])) * area
-		tangentdir[1] = ((uv_distCA[1] * p_distBA[1]) - (uv_distBA[1] * p_distCA[1])) * area
-		tangentdir[2] = ((uv_distCA[1] * p_distBA[2]) - (uv_distBA[1] * p_distCA[2])) * area
-		
-		# for quads:
-		if len(polyverts) > 3 and len(uvpoly) > 3:
-			uv4 = Vector(uvpoly[3])
-			v4 = Vector(polyverts[3])
-			
-			uv_distDA = uv4 - uv1
-			uv_distAC = uv1 - uv3
-			
-			p_distAC = v1 - v3
-			p_distDA = v4 - v1
-			
-			area2 = (uv_distAC[0] * uv_distDA[1]) - (uv_distDA[1] * uv_distAC[0])
-			
-			tangentdir2 = Vector((0.0,0.0,0.0))
-			tangentdir2[0] = ((uv_distDA[0] * p_distAC[0]) - (uv_distAC[0] * p_distDA[0])) * area2
-			tangentdir2[1] = ((uv_distDA[0] * p_distAC[1]) - (uv_distAC[0] * p_distDA[1])) * area2
-			tangentdir2[2] = ((uv_distDA[0] * p_distAC[2]) - (uv_distAC[0] * p_distDA[2])) * area2
-		
-			tangentdir = (tangentdir + tangentdir2) * 0.5
-		
+		p_dBA = polyverts[1] - polyverts[0]
+		p_dCA = polyverts[2] - polyverts[0]
+		# calculate face area - may not be needed since results are pretty much identical on import with or without this
+		area = (uv_dBA[0] * uv_dCA[1]) - (uv_dBA[1] * uv_dCA[0])
+		if area > 0.0:
+			area = 1.0 / area
+		tangentdir = Vector(
+			((uv_dCA[1] * p_dBA[0]) - (uv_dBA[1] * p_dCA[0]),
+			(uv_dCA[1] * p_dBA[1]) - (uv_dBA[1] * p_dCA[1]),
+			(uv_dCA[1] * p_dBA[2]) - (uv_dBA[1] * p_dCA[2]))
+			) * area
 		return tangentdir
+	
 	
 	
 	def write_mesh(my_mesh):
@@ -1445,297 +1442,248 @@ def save_single(operator, scene, filepath="",
 		uvverts_list = []
 		uv_vertcoords = []
 		vindices = []
-		uvlayer = []
+		vindexlist2 = []
 		
-		export_tangents = False
 		is_collision = ("UCX_" in meshobject.name)
 		
-		# no need for tangents on a collision mesh
-		if not is_collision:
-			if export_tangentspace_base != 'NONE':
-				if len(me.tessface_uv_textures) > 0:
-					uvlayer = [uvl for uvl in me.tessface_uv_textures[0].data]
-					export_tangents = True
 		
-		usedefaultnormals = (normals_export_mode == 'BLEND') or is_collision
+		normalsmode = normals_export_mode
+		usedefaultnormals = False
+		export_tangents = False
+		
+		if not is_collision:
+			# check if tangents need to be exported and uv layer exists
+			if export_tangentspace_base != 'NONE':
+				if len(me.tessface_uv_textures) > tangentspace_uvlnum:
+					export_tangents = True
+			
+			# check if required data exists / autodetect if needed
+			if normalsmode == 'AUTO':
+				if 'polyn_meshdata' in meshobject or 'vertexn_meshdata' in meshobject:
+					normalsmode = 'NORMEDIT'
+				elif 'vertex_normal_list' in meshobject:
+					normalsmode = 'RECALCVN'
+				else:
+					normalsmode = 'BLEND'
+					usedefaultnormals = True
+			elif normalsmode == 'NORMEDIT':
+				if bpy.context.window_manager.edit_splitnormals:
+					if 'polyn_meshdata' not in meshobject:
+						operator.report({'WARNING'}, "List not found")
+						usedefaultnormals = True
+				else:
+					if 'vertexn_meshdata' not in meshobject:
+						operator.report({'WARNING'}, "List not found")
+						usedefaultnormals = True
+			elif normalsmode == 'RECALCVN':
+				if 'vertex_normal_list' not in meshobject:
+					operator.report({'WARNING'}, "List not found")
+					usedefaultnormals = True
+			elif normalsmode == 'BLEND':
+				usedefaultnormals = True
+		else:
+			usedefaultnormals = True
+		
 		
 		#################
 		# Normals:
-		
-		#################################################
-		# custom - Included Addon
-		
 		if not usedefaultnormals:
-			if ('polyn_meshdata' in meshobject or 'vertexn_meshdata' in meshobject) and (normals_export_mode == 'C_ISATHAR' or normals_export_mode == 'AUTO'):
-					# convert per vertex to per poly if needed
-					if not bpy.context.window_manager.edit_splitnormals:
-						meshobject.polyn_meshdata.clear()
-						
+			
+			#################################################
+			# Custom - Included normals editor
+			if normalsmode == 'NORMEDIT':
+				# convert per vertex to per poly if needed
+				if bpy.context.window_manager.edit_splitnormals:
+					if len(meshobject.polyn_meshdata) == len(me_faces):
+						for i in range(len(meshobject.polyn_meshdata)):
+							tempvcount = 0
+							for vd in meshobject.polyn_meshdata[i].vdata:
+								if tempvcount < len(me_faces[i].vertices):
+									me_normals.append(Vector(vd.vnormal))
+								tempvcount += 1
+					else:
+						operator.report({'WARNING'}, "List size mismatch")
+						usedefaultnormals = True
+				else:
+					if len(meshobject.vertexn_meshdata) == len(me_vertices):
 						for f in me_faces:
-							tempfacedata = meshobject.polyn_meshdata.add()
-							tempfacedata.fcenter = f.center
-							
-							if 'vdata' not in tempfacedata:
-								tempfacedata['vdata'] = []
-							
 							tempverts = [v for v in f.vertices]
 							for j in tempverts:
-								tempvertdata = tempfacedata.vdata.add()
-								tempvertdata.vpos = meshobject.vertexn_meshdata[j].vpos
-								tempvertdata.vnormal = meshobject.vertexn_meshdata[j].vnormal
-						
-						#meshobject.vertexn_meshdata.clear()
-					
-					for i in range(len(meshobject.polyn_meshdata)):
-						tempvcount = 0
-						for vd in meshobject.polyn_meshdata[i].vdata:
-							if tempvcount < len(me_faces[i].vertices):
-								me_normals.append(Vector(vd.vnormal))
-							tempvcount += 1
-					
-					if export_tangents and export_tangentspace_base == 'LENGY':
-						for i in range(len(meshobject.polyn_meshdata)):
-							faceverts = []
-							uvface = []
-							vcount = 0
-							
-							for vd in meshobject.polyn_meshdata[i].vdata:
-								faceverts.append(Vector(vd.vpos))
-									
-								if vcount == 0:
-									uvface.append(uvlayer[i].uv1)
-									uv_vertcoords.append(Vector(uvlayer[i].uv1))
-								elif vcount == 1:
-									uvface.append(uvlayer[i].uv2)
-									uv_vertcoords.append(Vector(uvlayer[i].uv2))
-								elif vcount == 2:
-									uvface.append(uvlayer[i].uv3)
-									uv_vertcoords.append(Vector(uvlayer[i].uv3))
-								elif vcount == 3:
-									uvface.append(uvlayer[i].uv4)
-									uv_vertcoords.append(Vector(uvlayer[i].uv4))
-								
-								if vcount < len(me_faces[i].vertices):
-									vindices.append(me_faces[i].vertices[vcount])
-								vcount += 1
-							
-							for k in range(vcount):
-								uvverts_list.append(calc_uvtanbase(uvface, faceverts))
-
-				################################################################
-				# custom - Recalc Vertex Normals script
-			
-			elif 'vertex_normal_list' in meshobject and (normals_export_mode == 'C_ASDN' or normals_export_mode == 'AUTO'):
-				for i in range(len(me_faces)):
-					for j in me_faces[i].vertices:
-						me_normals.append(Vector(meshobject.vertex_normal_list[j].normal))
+								me_normals.append(Vector(meshobject.vertexn_meshdata[j].vnormal))
+					else:
+						operator.report({'WARNING'}, "List size mismatch")
+						usedefaultnormals = True
 				
-				if export_tangents:
-					for i in range(len(me_faces)):
-						faceverts = []
-						uvface = []
-						vcount = 0
-						
-						for j in me_faces[i].vertices:
-							faceverts.append(Vector(me_vertices[j].co))
-							
-							if export_tangentspace_base == 'LENGY':
-								if vcount == 0:
-									uvface.append(uvlayer[i].uv1)
-									uv_vertcoords.append(Vector(uvlayer[i].uv1))
-								elif vcount == 1:
-									uvface.append(uvlayer[i].uv2)
-									uv_vertcoords.append(Vector(uvlayer[i].uv2))
-								elif vcount == 2:
-									uvface.append(uvlayer[i].uv3)
-									uv_vertcoords.append(Vector(uvlayer[i].uv3))
-								elif vcount == 3:
-									uvface.append(uvlayer[i].uv4)
-									uv_vertcoords.append(Vector(uvlayer[i].uv4))
-							
-							vindices.append(j)
-							vcount += 1
-						
-						if export_tangentspace_base == 'LENGY':
-							for k in range(vcount):
-								tempheading = calc_uvtanbase(uvface, faceverts)
-								uvverts_list.append(tempheading)
-							
-			else:
-				usedefaultnormals = True
-		
-		#######################################################################
-		# default / fallback
-		
-		if usedefaultnormals:
-			for i in range(len(me_faces)):
-				for j in me_faces[i].vertices:
-					me_normals.append(Vector(me_vertices[j].normal))
+			################################################################
+			# Custom - adsn's Recalc Vertex Normals addon
+			elif normalsmode == 'RECALCVN':
+				if 'vertex_normal_list' in meshobject:
+					if len(meshobject.vertex_normal_list) == len(me_vertices):
+						for i in range(len(me_faces)):
+							for j in me_faces[i].vertices:
+								me_normals.append(Vector(meshobject.vertex_normal_list[j].normal))
+					else:
+						operator.report({'WARNING'}, "List size mismatch")
+						usedefaultnormals = True
 			
-			if export_tangents:
-				if export_tangentspace_base == 'LENGY':
-					for i in range(len(me_faces)):
-						faceverts = []
-						uvface = []
-						vcount = 0
-						
-						for j in me_faces[i].vertices:
-							faceverts.append(Vector(me_vertices[j].co))
-							
-							if vcount == 0:
-								uvface.append(uvlayer[i].uv1)
-								uv_vertcoords.append(Vector(uvlayer[i].uv1))
-							elif vcount == 1:
-								uvface.append(uvlayer[i].uv2)
-								uv_vertcoords.append(Vector(uvlayer[i].uv2))
-							elif vcount == 2:
-								uvface.append(uvlayer[i].uv3)
-								uv_vertcoords.append(Vector(uvlayer[i].uv3))
-							elif vcount == 3:
-								uvface.append(uvlayer[i].uv4)
-								uv_vertcoords.append(Vector(uvlayer[i].uv4))
-							
-							vindices.append(j)
-							vcount += 1
-						
-						for k in range(vcount):
-							uvverts_list.append(calc_uvtanbase(uvface, faceverts))
 		
-		uvlayer = []
+		######################################################################
+		# Blender split vertex normals - Default / fallback
+		if usedefaultnormals:
+			me.calc_normals_split()
+			me_normals = [t.normal.copy() for t in me.loops]
+			me.free_normals_split()
+		
+		
+		
 		##############################################################
 		# Tangents + Binormals:
-		
 		if export_tangents:
-			if export_tangentspace_base == 'LENGY':
-				if len(uvverts_list) != len(me_normals):
-					print("UV length mismatch: Tangents will not be calculated.")
-				else :
-					for i in range(len(me_normals)):
-						tan = uvverts_list[i]
-						norm = me_normals[i]
-						
-						temptan = (tan - (norm * norm.dot(tan))).normalized()
-						
-						me_tangents.append(temptan)
-						me_binormals.append(norm.cross(temptan))
+			
+			############################
+			# Blender Default - MikkTSpace (read from loops)
+			# - copy() because me_tangents is cleared by calc_normals_split
+			if export_tangentspace_base == 'DEFAULT':
+				if normalsmode == 'BLEND':
+					me.calc_normals_split()
+					me.calc_tangents(me.uv_layers[tangentspace_uvlnum].name)
 					
-					uvverts_list = []
-					# tangent smoothing
-					# slow - iterates through each vertex + creates lists for the smoothing pass
-					# smoothing is based on faces + uv islands that share the same vertices
+					me_tangents = [t.tangent.copy() for t in me.loops]
+					me_binormals = [t.bitangent.copy() for t in me.loops]
+					
+					me.free_tangents()
+					me.free_normals_split()
+				else:
+					operator.report({'WARNING'}, "Default Tangents require default normals")
+					export_tangents = False
+				
+			############################
+			# Custom - modified Lengyel's method
+			elif export_tangentspace_base == 'LENGYEL':
+				t_uvlayer = [uvl for uvl in me.tessface_uv_textures[tangentspace_uvlnum].data]
+				weightslist = []
+				
+				for i in range(len(me_faces)):
+					faceverts = []
+					uvface = []
+					
+					uvface.append(t_uvlayer[i].uv1.copy())
+					uv_vertcoords.append(t_uvlayer[i].uv1.copy())
+					uvface.append(t_uvlayer[i].uv2.copy())
+					uv_vertcoords.append(t_uvlayer[i].uv2.copy())
+					uvface.append(t_uvlayer[i].uv3.copy())
+					uv_vertcoords.append(t_uvlayer[i].uv3.copy())
+					if len(me_faces[i].vertices) > 3:
+						uvface.append(t_uvlayer[i].uv4.copy())
+						uv_vertcoords.append(t_uvlayer[i].uv4.copy())
+					
+					for j in me_faces[i].vertices:
+						faceverts.append(me_vertices[j].co.copy())
+						vindexlist2.append(len(vindices))
+						vindices.append(j)
+					
+					for k in range(len(me_faces[i].vertices)):
+						uvverts_list.append(calc_uvtanbase(uvface, faceverts))
+				
+				if len(uvverts_list) != len(me_normals):
+					operator.report({'WARNING'}, "UV list length mismatch: Tangents will not be calculated.")
+				else :
+					# Calculate tangents/binormals from normals list and uvverts_list
+					for i in range(len(me_normals)):
+						tan = (uvverts_list[i] - (me_normals[i] * me_normals[i].dot(uvverts_list[i]))).normalized()
+						me_tangents.append(tan)
+						me_binormals.append(me_normals[i].cross(tan))
+					
+					
+					tempvect = Vector((0.0,0.0,0.0))
+					smoothlist = [[],[],[],[]]
+					vertstoremove = []
+					new_tangents = [v for v in me_tangents]
+					
+					# 			Tangent Smoothing
+					# - averages the tangents for each vert connected to a smoothed face to remove 'jittering'
+					# - smoothing is based on uv islands each vert's faces are in
 					for i in range(len(me_vertices)):
-						oneseamlist = []
-						twoseamslist = []
-						threeseamslist = []
-						fourseamslist = []
 						
-						oneseamindices = []
-						twoseamindices = []
-						threeseamindices = []
-						fourseamindices = []
-						
-						oneseamavgcount = 0
-						twoseamavgcount = 0
-						threeseamavgcount = 0
-						fourseamavgcount = 0
-						
-						oneseamlastindex = -1
-						twoseamlastindex = -1
-						threeseamlastindex = -1
-						
-						# Gather pass (4 uv seams / vertex max)
-						for j in range(len(vindices)):
+						# Gather Loop
+						# - slow - checks the index list for uv islands each vert is part of
+						for j in vindexlist2:
 							if vindices[j] == i:
-								if oneseamavgcount < 1:
-									oneseamlastindex = j
-									oneseamlist.append(me_tangents[j])
-									oneseamindices.append(j)
-									oneseamavgcount += 1
-								else:
-									tempUV1 = uv_vertcoords[j]
-									tempUV2 = uv_vertcoords[oneseamlastindex]
-									if math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2)) < 0.01:
-										oneseamlastindex = j
-										oneseamlist.append(me_tangents[j])
-										oneseamindices.append(j)
-										oneseamavgcount += 1
+								vertstoremove.append(j)
+								if len(smoothlist[0]) > 0:
+									if math.sqrt(((uv_vertcoords[j][0] - uv_vertcoords[smoothlist[0][0]][0]) ** 2) + ((uv_vertcoords[j][1] - uv_vertcoords[smoothlist[0][0]][1]) ** 2)) < 0.01:
+										smoothlist[0].append(j)
 									else:
-										if twoseamlastindex > -1:
-											tempUV1 = uv_vertcoords[j]
-											tempUV2 = uv_vertcoords[twoseamlastindex]
-											if math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2)) < 0.01:
-												twoseamlastindex = j
-												twoseamslist.append(me_tangents[j])
-												twoseamindices.append(j)
-												twoseamavgcount += 1
+										if len(smoothlist[1]) > 0:
+											if math.sqrt(((uv_vertcoords[j][0] - uv_vertcoords[smoothlist[1][0]][0]) ** 2) + ((uv_vertcoords[j][1] - uv_vertcoords[smoothlist[1][0]][1]) ** 2)) < 0.01:
+												smoothlist[1].append(j)
 											else:
-												if threeseamlastindex > -1:
-													tempUV1 = uv_vertcoords[j]
-													tempUV2 = uv_vertcoords[threeseamlastindex]
-													if math.sqrt(((tempUV1[0] - tempUV2[0]) ** 2) + ((tempUV1[1] - tempUV2[1]) ** 2)) < 0.01:
-														threeseamlastindex = j
-														threeseamslist.append(me_tangents[j])
-														threeseamindices.append(j)
-														threeseamavgcount += 1
+												if len(smoothlist[2]) > 0:
+													if math.sqrt(((uv_vertcoords[j][0] - uv_vertcoords[smoothlist[2][0]][0]) ** 2) + ((uv_vertcoords[j][1] - uv_vertcoords[smoothlist[2][0]][1]) ** 2)) < 0.01:
+														smoothlist[2].append(j)
 													else:
-														fourseamslist.append(me_tangents[j])
-														fourseamindices.append(j)
-														fourseamavgcount += 1
+														smoothlist[3].append(j)
 												else:
-													threeseamlastindex = j
-													threeseamslist.append(me_tangents[j])
-													threeseamindices.append(j)
-													threeseamavgcount += 1
+													smoothlist[2].append(j)
 										else:
-											twoseamlastindex = j
-											twoseamslist.append(me_tangents[j])
-											twoseamindices.append(j)
-											twoseamavgcount += 1
+											smoothlist[1].append(j)
+								else:
+									smoothlist[0].append(j)
 						
+						# calculation time tweak: remove indices that won't come up again for less iterations in successive passes
+						for k in vertstoremove:
+							vindexlist2.remove(k)
 						
-						# averages the lists for this vert (smoothing pass)
-						if oneseamavgcount > 0:
-							tempvect = Vector((0.0,0.0,0.0))
-							for l in range(len(oneseamlist)):
-								tempvect = tempvect + oneseamlist[l]
-							tempvect = tempvect / float(oneseamavgcount)
-							for ti in oneseamindices:
-								me_tangents[ti] = tempvect
-								me_binormals[ti] = me_normals[ti].cross(tempvect)
+						# Smoothing pass for this vert
+						# - averages the tangents of vertices that are on the same uv island
+						# - 4 uv islands / vertex max, anything else gets averaged into fourth island for now
+						if len(smoothlist[0]) > 0:
+							tempvect.zero()
+							for l in smoothlist[0]:
+								tempvect += me_tangents[l]
+							tempvect = tempvect / float(len(smoothlist[0]))
+							for t in smoothlist[0]:
+								new_tangents[t] = tempvect.copy()
+								me_binormals[t] = me_normals[t].cross(tempvect)
 							
-							if twoseamavgcount > 0:
-								tempvect = Vector((0.0,0.0,0.0))
-								for l in range(len(twoseamslist)):
-									tempvect = tempvect + twoseamslist[l]
-								tempvect = tempvect / float(twoseamavgcount)
-								for ti2 in twoseamindices:
-									me_tangents[ti2] = tempvect
-									me_binormals[ti2] = me_normals[ti2].cross(tempvect)
+							if len(smoothlist[1]) > 0:
+								tempvect.zero()
+								for l in smoothlist[1]:
+									tempvect += me_tangents[l]
+								tempvect = tempvect / float(len(smoothlist[1]))
+								for t in smoothlist[1]:
+									new_tangents[t] = tempvect.copy()
+									me_binormals[t] = me_normals[t].cross(tempvect)
 									
-								if threeseamavgcount > 0:
-									tempvect = Vector((0.0,0.0,0.0))
-									for l in range(len(threeseamslist)):
-										tempvect = tempvect + threeseamslist[l]
-									tempvect = tempvect / float(threeseamavgcount)
-									for ti3 in threeseamindices:
-										me_tangents[ti3] = tempvect
-										me_binormals[ti3] = me_normals[ti3].cross(tempvect)
+								if len(smoothlist[2]) > 0:
+									tempvect.zero()
+									for l in smoothlist[2]:
+										tempvect += me_tangents[l]
+									tempvect = tempvect / float(len(smoothlist[2]))
+									for t in smoothlist[2]:
+										new_tangents[t] = tempvect.copy()
+										me_binormals[t] = me_normals[t].cross(tempvect)
 										
-									if fourseamavgcount > 0:
-										tempvect = Vector((0.0,0.0,0.0))
-										for l in range(len(fourseamslist)):
-											tempvect = tempvect + fourseamslist[l]
-										tempvect = tempvect / float(fourseamavgcount)
-										for ti4 in fourseamindices:
-											me_tangents[ti4] = tempvect
-											me_binormals[ti4] = me_normals[ti4].cross(tempvect)
+									if len(smoothlist[3]) > 0:
+										tempvect.zero()
+										for l in smoothlist[3]:
+											tempvect += me_tangents[l]
+										tempvect = tempvect / float(len(smoothlist[3]))
+										for t in smoothlist[3]:
+											new_tangents[t] = tempvect.copy()
+											me_binormals[t] = me_normals[t].cross(tempvect)
+						
+						# reset vars for next iteration
+						smoothlist = [[],[],[],[]]
+						vertstoremove = []
+					
+					me_tangents = [v for v in new_tangents]
 		
-		uv_vertcoords = []
 		######################################
 		
-		# UE Skeleton Rotation fix - needs to be rotated by -X instead of Y here for some reason...
-		# - this is a fix for normals being rotated after the root bone changes
-		poseMatrix = write_object_props(my_mesh.blenObject, None, meshobject.matrix_world * Matrix.Rotation(-(math.pi / 2.0), 4, 'X'))[3]
+		
+		# use global matrix here to apply scale + axis settings to the mesh
+		poseMatrix = write_object_props(my_mesh.blenObject, None, meshobject.matrix_world * global_matrix)[3]
 		
 		# Calculate the global transform for the mesh in the bind pose the same way we do
 		# in write_sub_deformer_skin
@@ -1765,7 +1713,7 @@ def save_single(operator, scene, filepath="",
 				fw('%.6f,%.6f,%.6f' % v.co[:])
 				i = 0
 			else:
-				if i == 7:
+				if i == 4:
 					fw('\n\t\t')
 					i = 0
 				fw(',%.6f,%.6f,%.6f' % v.co[:])
@@ -1774,7 +1722,6 @@ def save_single(operator, scene, filepath="",
 		fw('\n\t\tPolygonVertexIndex: ')
 		i = -1
 		for f in me_faces:
-			#fi = f.vertices[:]
 			fi = [fv for fv in f.vertices]
 			# last index XORd w. -1 indicates end of face
 			if i == -1:
@@ -1794,32 +1741,33 @@ def save_single(operator, scene, filepath="",
 			i += 1
 		
 		# write loose edges as faces.
-		for ed in me_edges:
-			if ed.is_loose:
-				ed_val = ed.vertices[:]
-				ed_val = ed_val[0], ed_val[-1] ^ -1
+		if len(me_edges) > 0:
+			for ed in me_edges:
+				if ed.is_loose:
+					ed_val = ed.vertices[:]
+					ed_val = ed_val[0], ed_val[-1] ^ -1
+					if i == -1:
+						fw('%i,%i' % ed_val)
+						i = 0
+					else:
+						if i == 13:
+							fw('\n\t\t')
+							i = 0
+						fw(',%i,%i' % ed_val)
+				i += 1
+			
+			fw('\n\t\tEdges: ')
+			i = -1
+			for ed in me_edges:
 				if i == -1:
-					fw('%i,%i' % ed_val)
+					fw('%i,%i' % (ed.vertices[0], ed.vertices[1]))
 					i = 0
 				else:
 					if i == 13:
 						fw('\n\t\t')
 						i = 0
-					fw(',%i,%i' % ed_val)
-			i += 1
-		
-		fw('\n\t\tEdges: ')
-		i = -1
-		for ed in me_edges:
-			if i == -1:
-				fw('%i,%i' % (ed.vertices[0], ed.vertices[1]))
-				i = 0
-			else:
-				if i == 13:
-					fw('\n\t\t')
-					i = 0
-				fw(',%i,%i' % (ed.vertices[0], ed.vertices[1]))
-			i += 1
+					fw(',%i,%i' % (ed.vertices[0], ed.vertices[1]))
+				i += 1
 		fw('\n\t\tGeometryVersion: 124')
 		
 		
@@ -1840,7 +1788,7 @@ def save_single(operator, scene, filepath="",
 				fw('%.6f,%.6f,%.6f' % v[:])
 				i = 0
 			else:
-				if i == 2:
+				if i == 4:
 					fw('\n\t\t\t ')
 					i = 0
 				fw(',%.6f,%.6f,%.6f'% v[:])
@@ -1863,7 +1811,7 @@ def save_single(operator, scene, filepath="",
 					fw('%.6f,%.6f,%.6f' % v[:])
 					i = 0
 				else:
-					if i == 2:
+					if i == 4:
 						fw('\n\t\t\t ')
 						i = 0
 					fw(',%.6f,%.6f,%.6f'% v[:])
@@ -1884,7 +1832,7 @@ def save_single(operator, scene, filepath="",
 					fw('%.6f,%.6f,%.6f' % v[:])
 					i = 0
 				else:
-					if i == 2:
+					if i == 4:
 						fw('\n\t\t\t ')
 						i = 0
 					fw(',%.6f,%.6f,%.6f'% v[:])
@@ -1954,10 +1902,38 @@ def save_single(operator, scene, filepath="",
 		collayers = []
 		if len(me.tessface_vertex_colors):
 			collayers = me.tessface_vertex_colors
-			for colindex, collayer in enumerate(collayers):
-				fw('\n\t\tLayerElementColor: %i {' % colindex)
+			
+			if merge_vertexcollayers:
+				newvcols = []
+				finalvcols = []
+				totalcolcount = 0
+				for collayer in collayers:
+					newvcols = []
+					totalcolcount = 0
+					findex = 0
+					for cf in collayer.data:
+						totalcolcount += len(me_faces[findex].vertices)
+						
+						newvcols.append(cf.color1)
+						newvcols.append(cf.color2)
+						newvcols.append(cf.color3)
+						if len(me_faces[findex].vertices) == 4:
+							newvcols.append(cf.color4)
+						
+						findex += 1
+					
+					tempcount = 0
+					for cc in newvcols:
+						if len(finalvcols) < len(newvcols):
+							finalvcols.append(cc)
+						else:
+							finalvcols[tempcount] = cc + finalvcols[tempcount]
+						
+						tempcount += 1
+							
+				fw('\n\t\tLayerElementColor: 0 {')
 				fw('\n\t\t\tVersion: 101')
-				fw('\n\t\t\tName: "%s"' % collayer.name)
+				fw('\n\t\t\tName: "colscombined"')
 				fw('''
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
@@ -1965,24 +1941,18 @@ def save_single(operator, scene, filepath="",
 				
 				i = -1
 				ii = 0  # Count how many Colors we write
-				print(len(me_faces), len(collayer.data))
-				for fi, cf in enumerate(collayer.data):
-					if len(me_faces[fi].vertices) == 4:
-						colors = cf.color1[:], cf.color2[:], cf.color3[:], cf.color4[:]
+				
+				for col in finalvcols:
+					if i == -1:
+						fw('%.4f,%.4f,%.4f,1' % (col[0], col[1], col[2]))
+						i = 0
 					else:
-						colors = cf.color1[:], cf.color2[:], cf.color3[:]
-					
-					for col in colors:
-						if i == -1:
-							fw('%.4f,%.4f,%.4f,1' % col)
+						if i == 7:
+							fw('\n\t\t\t\t')
 							i = 0
-						else:
-							if i == 7:
-								fw('\n\t\t\t\t')
-								i = 0
-							fw(',%.4f,%.4f,%.4f,1' % col)
-						i += 1
-						ii += 1  # One more Color
+						fw(',%.4f,%.4f,%.4f,1' % (col[0], col[1], col[2]))
+					i += 1
+					ii += 1  # One more Color
 				
 				fw('\n\t\t\tColorIndex: ')
 				i = -1
@@ -1997,6 +1967,55 @@ def save_single(operator, scene, filepath="",
 						fw(',%i' % j)
 					i += 1
 				fw('\n\t\t}')
+				collayers = [collayers[0]]
+				
+			else:
+			
+			
+			
+				for colindex, collayer in enumerate(collayers):
+					fw('\n\t\tLayerElementColor: %i {' % colindex)
+					fw('\n\t\t\tVersion: 101')
+					fw('\n\t\t\tName: "%s"' % collayer.name)
+					fw('''
+				MappingInformationType: "ByPolygonVertex"
+				ReferenceInformationType: "IndexToDirect"
+				Colors: ''')
+					
+					i = -1
+					ii = 0  # Count how many Colors we write
+					print(len(me_faces), len(collayer.data))
+					for fi, cf in enumerate(collayer.data):
+						if len(me_faces[fi].vertices) == 4:
+							colors = cf.color1[:], cf.color2[:], cf.color3[:], cf.color4[:]
+						else:
+							colors = cf.color1[:], cf.color2[:], cf.color3[:]
+						
+						for col in colors:
+							if i == -1:
+								fw('%.4f,%.4f,%.4f,1' % col)
+								i = 0
+							else:
+								if i == 7:
+									fw('\n\t\t\t\t')
+									i = 0
+								fw(',%.4f,%.4f,%.4f,1' % col)
+							i += 1
+							ii += 1  # One more Color
+					
+					fw('\n\t\t\tColorIndex: ')
+					i = -1
+					for j in range(ii):
+						if i == -1:
+							fw('%i' % j)
+							i = 0
+						else:
+							if i == 55:
+								fw('\n\t\t\t\t')
+								i = 0
+							fw(',%i' % j)
+						i += 1
+					fw('\n\t\t}')
 		
 		# Write UV and texture layers.
 		uvlayers = []
@@ -2300,7 +2319,9 @@ def save_single(operator, scene, filepath="",
 						fw(",0,0,0")
 					i += 1
 				fw('\n\t\t}')
-
+				
+		# not completely sure about this, but it's in the converter output:
+		fw('\n\t\tNodeAttributeName: "Geometry::%s' % (str(meshobject.name) + '_ncl1_1"'))
 		fw('\n\t}')
 
 	def write_group(name):
@@ -2661,15 +2682,15 @@ Definitions:  {
 		len(ob_meshes) +
 		len(ob_lights) +
 		len(ob_cameras) +
-		len(ob_arms) +
 		len(ob_null) +
 		len(ob_bones) +
 		bone_deformer_count +
 		len(materials) +
-		(len(textures) * 2)))  # add 1 for global settings
-
+		(len(textures) * 2) +
+		3)) # add 1 each for global settings, sceneinfo, pose
+	
 	del bone_deformer_count
-
+	
 	fw('''
 	ObjectType: "Model" {
 		Count: %i
@@ -2678,66 +2699,68 @@ Definitions:  {
 		len(ob_meshes) +
 		len(ob_lights) +
 		len(ob_cameras) +
-		len(ob_arms) +
 		len(ob_null) +
 		len(ob_bones)))
-
-	fw('''
-	ObjectType: "Geometry" {
-		Count: %i
-	}''' % len(ob_meshes))
-
+	
 	if materials:
 		fw('''
 	ObjectType: "Material" {
 		Count: %i
 	}''' % len(materials))
-
+	
 	if textures:
 		fw('''
 	ObjectType: "Texture" {
 		Count: %i
 	}''' % len(textures))  # add 1 for an empty tex
+	
 		fw('''
 	ObjectType: "Video" {
 		Count: %i
-	}''' % len(textures))  # add 1 for an empty tex
-
+	}''' % (len(textures) * 2))  # add 1 for an empty tex
+	
+	fw('''
+	ObjectType: "SceneInfo" {
+		Count: 1
+	}''')
+	
+	fw('''
+	ObjectType: "GlobalSettings" {
+		Count: 1
+	}''')
+	
 	tmp = 0
 	# Add deformer nodes
 	for my_mesh in ob_meshes:
 		if my_mesh.fbxArm:
 			tmp += 1
-
+	
 	# Add subdeformers
 	for my_bone in ob_bones:
 		tmp += len(my_bone.blenMeshes)
-
+	
 	if tmp:
 		fw('''
 	ObjectType: "Deformer" {
 		Count: %i
 	}''' % tmp)
 	del tmp
-
+	
 	# Bind pose is essential for XNA if the 'MESH' is included (JCB)
 	fw('''
 	ObjectType: "Pose" {
 		Count: 1
 	}''')
-
+	
 	if groups:
 		fw('''
 	ObjectType: "GroupSelection" {
 		Count: %i
 	}''' % len(groups))
-
+	
 	fw('''
-	ObjectType: "GlobalSettings" {
-		Count: 1
-	}
 }''')
-
+	
 	fw('''
 
 ; Object properties
@@ -2769,7 +2792,43 @@ Objects:  {''')
 	#for bonename, bone, obname, me, armob in ob_bones:
 	for my_bone in ob_bones:
 		write_bone(my_bone)
-
+	
+	# SceneInfo:
+	fw('''
+	SceneInfo: "SceneInfo::GlobalInfo", "UserData" {
+		Type: "UserData"
+		Version: 100
+		MetaData:  {
+			Version: 100
+			Title: ""
+			Subject: ""
+			Author: ""
+			Keywords: ""
+			Revision: ""
+			Comment: ""
+		}
+		Properties60:  {
+			''')
+	
+	fw('Property: "DocumentUrl", "KString", "", "%s"\n' % filepath)
+	fw('\t\t\t\n')
+	fw('\t\t\tProperty: "SrcDocumentUrl", "KString", "", "%s"\n' % filepath)
+	
+	fw('''
+			Property: "Original", "Compound", ""
+			Property: "Original|ApplicationVendor", "KString", "", ""
+			Property: "Original|ApplicationName", "KString", "", "Blender"
+			Property: "Original|ApplicationVersion", "KString", "", "2.73"
+			Property: "Original|DateTime_GMT", "DateTime", "", ""
+			Property: "Original|FileName", "KString", "", ""
+			Property: "LastSaved", "Compound", ""
+			Property: "LastSaved|ApplicationVendor", "KString", "", ""
+			Property: "LastSaved|ApplicationName", "KString", "", "Blender"
+			Property: "LastSaved|ApplicationVersion", "KString", "", "2.73"
+			Property: "LastSaved|DateTime_GMT", "DateTime", "", ""
+		}
+	}''')
+	
 	if 'CAMERA' in object_types:
 		write_camera_default()
 
@@ -2783,29 +2842,7 @@ Objects:  {''')
 	for texname, tex in textures:
 		write_texture(texname, tex, i)
 		i += 1
-
-	for groupname, group in groups:
-		write_group(groupname)
-
-	# NOTE - c4d and motionbuilder dont need normalized weights, but deep-exploration 5 does and (max?) do.
-
-	# Write armature modifiers
-	# TODO - add another MODEL? - because of this skin definition.
-	for my_mesh in ob_meshes:
-		if my_mesh.fbxArm:
-			write_deformer_skin(my_mesh.fbxName)
-
-			# Get normalized weights for temorary use
-			if my_mesh.fbxBoneParent:
-				weights = None
-			else:
-				weights = meshNormalizedWeights(my_mesh.blenObject, my_mesh.blenData)
-
-			#for bonename, bone, obname, bone_mesh, armob in ob_bones:
-			for my_bone in ob_bones:
-				if me in iter(my_bone.blenMeshes.values()):
-					write_sub_deformer_skin(my_mesh, my_bone, weights)
-
+	
 	# Write pose is really weird, only needed when an armature and mesh are used together
 	# each by themselves do not need pose data. For now only pose meshes and bones
 
@@ -2826,8 +2863,33 @@ Objects:  {''')
 		fw('\n\t\t}')
 
 	fw('\n\t}')
+	
+	
+	# NOTE - c4d and motionbuilder dont need normalized weights, but deep-exploration 5 does and (max?) do.
 
+	# Write armature modifiers
+	# TODO - add another MODEL? - because of this skin definition.
+	for my_mesh in ob_meshes:
+		if my_mesh.fbxArm:
+			write_deformer_skin(my_mesh.fbxName)
+
+			# Get normalized weights for temorary use
+			if my_mesh.fbxBoneParent:
+				weights = None
+			else:
+				weights = meshNormalizedWeights(my_mesh.blenObject, my_mesh.blenData)
+
+			#for bonename, bone, obname, bone_mesh, armob in ob_bones:
+			for my_bone in ob_bones:
+				if me in iter(my_bone.blenMeshes.values()):
+					write_sub_deformer_skin(my_mesh, my_bone, weights)
+
+
+	for groupname, group in groups:
+		write_group(groupname)
+	
 	# Finish Writing Objects
+	
 	# Write global settings
 	fw('''
 	GlobalSettings:  {
@@ -2845,84 +2907,8 @@ Objects:  {''')
 ''')
 	fw('}')
 
-	fw('''
-
-; Object relations
-;------------------------------------------------------------------
-
-Relations:  {''')
-
-	# Nulls are likely to cause problems for XNA
-
-	for my_null in ob_null:
-		fw('\n\tModel: "Model::%s", "Null" {\n\t}' % my_null.fbxName)
-
-	# Armature must be a Limb for XNA
-	# Note, 2.58 and previous wrote these as normal empties and it worked mostly (except for XNA)
+	# Removed object relations - doesn't appear to be needed
 	
-	# - removed Armature for root bone fix
-	#for my_arm in ob_arms:
-	#	fw('\n\tModel: "Model::%s", "Limb" {\n\t}' % my_arm.fbxName)
-
-	for my_mesh in ob_meshes:
-		fw('\n\tModel: "Model::%s", "Mesh" {\n\t}' % my_mesh.fbxName)
-
-	# TODO - limbs can have the same name for multiple armatures, should prefix.
-	#for bonename, bone, obname, me, armob in ob_bones:
-	for my_bone in ob_bones:
-		fw('\n\tModel: "Model::%s", "Limb" {\n\t}' % my_bone.fbxName)
-
-	for my_cam in ob_cameras:
-		fw('\n\tModel: "Model::%s", "Camera" {\n\t}' % my_cam.fbxName)
-
-	for my_light in ob_lights:
-		fw('\n\tModel: "Model::%s", "Light" {\n\t}' % my_light.fbxName)
-
-	fw('''
-	Model: "Model::Producer Perspective", "Camera" {
-	}
-	Model: "Model::Producer Top", "Camera" {
-	}
-	Model: "Model::Producer Bottom", "Camera" {
-	}
-	Model: "Model::Producer Front", "Camera" {
-	}
-	Model: "Model::Producer Back", "Camera" {
-	}
-	Model: "Model::Producer Right", "Camera" {
-	}
-	Model: "Model::Producer Left", "Camera" {
-	}
-	Model: "Model::Camera Switcher", "CameraSwitcher" {
-	}''')
-
-	for matname, (mat, tex) in materials:
-		fw('\n\tMaterial: "Material::%s", "" {\n\t}' % matname)
-
-	if textures:
-		for texname, tex in textures:
-			fw('\n\tTexture: "Texture::%s", "TextureVideoClip" {\n\t}' % texname)
-		for texname, tex in textures:
-			fw('\n\tVideo: "Video::%s", "Clip" {\n\t}' % texname)
-
-	# deformers - modifiers
-	for my_mesh in ob_meshes:
-		if my_mesh.fbxArm:
-			fw('\n\tDeformer: "Deformer::Skin %s", "Skin" {\n\t}' % my_mesh.fbxName)
-
-	#for bonename, bone, obname, me, armob in ob_bones:
-	for my_bone in ob_bones:
-		for fbxMeshObName in my_bone.blenMeshes:  # .keys() - fbxMeshObName
-			# is this bone effecting a mesh?
-			fw('\n\tDeformer: "SubDeformer::Cluster %s %s", "Cluster" {\n\t}' % (fbxMeshObName, my_bone.fbxName))
-
-	# This should be at the end
-	# fw('\n\tPose: "Pose::BIND_POSES", "BindPose" {\n\t}')
-
-	for groupname, group in groups:
-		fw('\n\tGroupSelection: "GroupSelection::%s", "Default" {\n\t}' % groupname)
-
-	fw('\n}')
 	fw('''
 
 ; Object connections
@@ -2963,7 +2949,16 @@ Connections:  {''')
 
 		for texname, tex in textures:
 			fw('\n\tConnect: "OO", "Video::%s", "Texture::%s"' % (texname, texname))
-
+	
+	# moved for consistency
+	#for bonename, bone, obname, me, armob in ob_bones:
+	for my_bone in ob_bones:
+		# Always parent to armature now
+		if my_bone.parent:
+			fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_bone.fbxName, my_bone.parent.fbxName))
+		else:
+			fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % (my_bone.fbxName))
+	
 	if 'MESH' in object_types:
 		for my_mesh in ob_meshes:
 			if my_mesh.fbxArm:
@@ -2977,26 +2972,13 @@ Connections:  {''')
 		for my_bone in ob_bones:
 			for fbxMeshObName in my_bone.blenMeshes:  # .keys()
 				fw('\n\tConnect: "OO", "Model::%s", "SubDeformer::Cluster %s %s"' % (my_bone.fbxName, fbxMeshObName, my_bone.fbxName))
-
-	#for bonename, bone, obname, me, armob in ob_bones:
-	for my_bone in ob_bones:
-		# Always parent to armature now
-		if my_bone.parent:
-			fw('\n\tConnect: "OO", "Model::%s", "Model::%s"' % (my_bone.fbxName, my_bone.parent.fbxName))
-		else:
-			fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % (my_bone.fbxName))
-		
-		
+	
 	# groups
 	if groups:
 		for ob_generic in ob_all_typegroups:
 			for ob_base in ob_generic:
 				for fbxGroupName in ob_base.fbxGroupNames:
 					fw('\n\tConnect: "OO", "Model::%s", "GroupSelection::%s"' % (ob_base.fbxName, fbxGroupName))
-
-	# I think the following always duplicates the armature connection because it is also in ob_all_typegroups above! (JCB)
-	# for my_arm in ob_arms:
-	#     fw('\n\tConnect: "OO", "Model::%s", "Model::Scene"' % my_arm.fbxName)
 
 	fw('\n}')
 
@@ -3283,7 +3265,12 @@ Takes:  {''')
 			for my_arm in ob_arms:
 				if my_arm.blenObject.animation_data:
 					my_arm.blenObject.animation_data.action = my_arm.blenAction
-
+		
+		# end action loop. set original actions
+		# do this after every loop in case actions effect eachother.
+		for my_arm in ob_arms:
+			if my_arm.blenObject.animation_data:
+				my_arm.blenObject.animation_data.action = my_arm.blenAction
 		fw('\n}')
 
 		scene.frame_set(frame_orig)
@@ -3461,7 +3448,9 @@ def save(operator, context,
 
 		# no active scene changing!
 		# bpy.data.scenes.active = orig_sce
-
+		
+		
+		
 		return {'FINISHED'}  # so the script wont run after we have batch exported.
 
 # removed application requirements section

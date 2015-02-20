@@ -1,6 +1,9 @@
 ###################################################################################################
-# Functions to import normals to the normal editor's mesh data variable from an existing FBX file
+# imports normals to the normal editor's mesh data variable from an existing FBX file
+#
 # - can import single or multiple meshes' normals (or all)
+# - only FBX 6.1 supported for now
+#
 ##########################################################
 
 import bpy

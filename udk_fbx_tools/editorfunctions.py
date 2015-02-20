@@ -5,6 +5,10 @@ import bmesh
 import bgl
 import math
 from mathutils import Vector
+import sys
+
+from . import normals_data
+
 
 
 # Math:
@@ -16,135 +20,144 @@ def in_distance(p1, p2, checkdist):
 # Editor:
 
 # generate new normals based on preset
-def generate_newnormals(context):
-	genmode = context.window_manager.vn_generatemode
+def generate_newnormals(self, context):
+	genmode = context.window_manager.vn_genmode
 	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
+	bm = bmesh.new()
+	
+	if context.mode == 'EDIT_MESH':
+		bm = bmesh.from_edit_mesh(me)
+	else:
+		bm.from_mesh(me)
+	
 	me.update()
 	
 	faces_list = [f for f in bm.faces]
 	verts_list = [v for v in bm.verts]
 	
-	# reset normals list to mesh's current normals
-	if context.window_manager.vn_resetongenerate:
-		reset_normals(context)
-	
 	# DEFAULT: Blender default
 	if (genmode == 'DEFAULT'):
-		me.calc_normals()
-		me.update()
+		wasobjmode = (context.mode == 'OBJECT')
+		
+		if wasobjmode:
+			bpy.ops.object.mode_set(mode='EDIT')
+			bm = bmesh.from_edit_mesh(me)
+			me.update()
+			faces_list = [f for f in bm.faces]
+			verts_list = [v for v in bm.verts]
+		
+		bpy.ops.mesh.normals_make_consistent()
 		
 		if context.window_manager.edit_splitnormals:
+			normals_data.cust_normals_ppoly.clear()
 			for i in range(len(faces_list)):
 				faceverts = [v for v in faces_list[i].verts]
-				tempfacedata = context.active_object.polyn_meshdata[i]
-				tempfacedata.fcenter = faces_list[i].calc_center_median()
-				
+				normals_data.cust_normals_ppoly.append([])
 				for j in range(len(faceverts)):
-					tempfacedata.vdata[j].vnormal = faceverts[j].normal
-					tempfacedata.vdata[j].vpos = faceverts[j].co
+					normals_data.cust_normals_ppoly[len(normals_data.cust_normals_ppoly) - 1].append(faceverts[j].normal.copy())
 		else:
+			normals_data.cust_normals_pvertex.clear()
 			for i in range(len(verts_list)):
-				tempV = context.active_object.vertexn_meshdata[i]
-				tempV.vpos = verts_list[i].co
-				tempV.vnormal = verts_list[i].normal
+				normals_data.cust_normals_pvertex.append(verts_list[i].normal.copy())
+		
+		if wasobjmode:
+			bpy.ops.object.mode_set(mode='OBJECT')
 	
 	# UPVECT: custom direction
 	elif (genmode == 'UPVECT'):
 		if context.window_manager.edit_splitnormals:
 			if context.window_manager.vn_genselectiononly:
-				for i in range(len(context.active_object.polyn_meshdata)):
-					for j in range(len(context.active_object.polyn_meshdata[i].vdata)):
+				for i in range(len(normals_data.cust_normals_ppoly)):
+					for j in range(len(normals_data.cust_normals_ppoly[i])):
 						if faces_list[i].verts[j].select:
-							context.active_object.polyn_meshdata[i].vdata[j].vnormal = context.window_manager.vn_directionalvector
+							normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_dirvector)
 			else:
-				for i in range(len(context.active_object.polyn_meshdata)):
-					for j in range(len(context.active_object.polyn_meshdata[i].vdata)):
-						context.active_object.polyn_meshdata[i].vdata[j].vnormal = context.window_manager.vn_directionalvector
+				for i in range(len(normals_data.cust_normals_ppoly)):
+					for j in range(len(normals_data.cust_normals_ppoly[i])):
+						normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_dirvector)
 		else:
 			if context.window_manager.vn_genselectiononly:
 				for i in range(len(verts_list)):
 					if verts_list[i].select:
-						context.active_object.vertexn_meshdata[i].vnormal = context.window_manager.vn_directionalvector
+						normals_data.cust_normals_pvertex[i] = Vector(context.window_manager.vn_dirvector)
 			else:
 				for i in range(len(verts_list)):
-					context.active_object.vertexn_meshdata[i].vnormal = context.window_manager.vn_directionalvector
+					normals_data.cust_normals_pvertex[i] = Vector(context.window_manager.vn_dirvector)
 	
-	# POINT: Bent from point (3D cursor)
-	elif (genmode == 'POINT'):
+	# BENT: Bent from point (3D cursor)
+	elif (genmode == 'BENT'):
 		cursorloc = context.scene.cursor_location
 		if context.window_manager.edit_splitnormals:
 			if context.window_manager.vn_genselectiononly:
-				for i in range(len(context.active_object.polyn_meshdata)):
-					for j in range(len(context.active_object.polyn_meshdata[i].vdata)):
+				for i in range(len(normals_data.cust_normals_ppoly)):
+					for j in range(len(normals_data.cust_normals_ppoly[i])):
 						if not (faces_list[i].hide) and faces_list[i].select:
-							tempv = Vector(context.active_object.polyn_meshdata[i].vdata[j].vpos) - cursorloc
+							tempv = Vector(faces_list[i].verts[j].co) - cursorloc
 							tempv = tempv.normalized()
-							context.active_object.polyn_meshdata[i].vdata[j].vnormal = tempv
+							normals_data.cust_normals_ppoly[i][j] = tempv.copy()
 			else:
-				for vn in context.active_object.polyn_meshdata:
-					for vd in vn.vdata:
+				for i in range(len(faces_list)):
+					for j in range(len(faces_list[i].verts)):
 						tempv = Vector(vd.vpos) - cursorloc
 						tempv = tempv.normalized()
-						vd.vnormal = tempv
+						normals_data.cust_normals_ppoly[i][j] = tempv.copy()
 		else:
 			if context.window_manager.vn_genselectiononly:
 				for i in range(len(verts_list)):
 					if verts_list[i].select:
 						tempv = Vector(verts_list[i].co) - cursorloc
 						tempv = tempv.normalized()
-						tempv = (Vector(context.active_object.vertexn_meshdata[i].vnormal) * (1.0 - context.window_manager.vn_genbendingratio)) + (tempv * (context.window_manager.vn_genbendingratio))
-						context.active_object.vertexn_meshdata[i].vnormal = tempv
+						tempv = (normals_data.cust_normals_pvertex[i] * (1.0 - context.window_manager.vn_genbendingratio)) + (tempv * (context.window_manager.vn_genbendingratio))
+						normals_data.cust_normals_pvertex[i] = tempv
 			else:
 				for i in range(len(verts_list)):
 					tempv = Vector(verts_list[i].co) - cursorloc
 					tempv = tempv.normalized()
-					tempv = (Vector(context.active_object.vertexn_meshdata[i].vnormal) * (1.0 - context.window_manager.vn_genbendingratio)) + (tempv * (context.window_manager.vn_genbendingratio))
-					context.active_object.vertexn_meshdata[i].vnormal = tempv
+					tempv = (normals_data.cust_normals_pvertex[i] * (1.0 - context.window_manager.vn_genbendingratio)) + (tempv * (context.window_manager.vn_genbendingratio))
+					normals_data.cust_normals_pvertex[i] = tempv
 	
 	# G_FOLIAGE: combination of bent and up-vector for ground foliage
 	elif (genmode == 'G_FOLIAGE'):
 		ignorehidden = context.window_manager.vn_genignorehidden
 		cursorloc = Vector(context.window_manager.vn_centeroffset)
 		if context.window_manager.edit_splitnormals:
-			for i in range(len(context.active_object.polyn_meshdata)):
+			for i in range(len(faces_list)):
 				ignoreface = False
 				if ignorehidden:
 					if faces_list[i].hide:
 						ignoreface = True
-				for j in range(len(context.active_object.polyn_meshdata[i].vdata)):
+				for j in range(len(faces_list[i].verts)):
 					if faces_list[i].verts[j].select:
 						if not ignoreface:
-							context.active_object.polyn_meshdata[i].vdata[j].vnormal = (0.0,0.0,1.0)
+							normals_data.cust_normals_ppoly[i][j] = Vector((0.0,0.0,1.0))
 					else:	
 						if not ignoreface:
-							tempv = Vector(context.active_object.polyn_meshdata[i].vdata[j].vpos) - cursorloc
-							context.active_object.polyn_meshdata[i].vdata[j].vnormal = tempv.normalized()
+							tempv = faces_list[i].verts[j].co - cursorloc
+							normals_data.cust_normals_ppoly[i][j] = tempv.normalized()
 		else:
 			for i in range(len(verts_list)):
 				if ignorehidden:
 					if not verts_list[i].hide:
 						if verts_list[i].select:
-							context.active_object.vertexn_meshdata[i].vnormal = (0.0,0.0,1.0)
+							normals_data.cust_normals_pvertex[i] = Vector((0.0,0.0,1.0))
 						else:
-							tempv = Vector(context.active_object.vertexn_meshdata[i].vpos) - cursorloc
-							context.active_object.vertexn_meshdata[i].vnormal = tempv.normalized()
+							tempv = verts_list[i].co - cursorloc
+							normals_data.cust_normals_pvertex[i] = tempv.normalized()
 				else:
 					if verts_list[i].select:
-						context.active_object.vertexn_meshdata[i].vnormal = (0.0,0.0,1.0)
+						normals_data.cust_normals_pvertex[i] = Vector((0.0,0.0,1.0))
 					else:
-						tempv = Vector(context.active_object.vertexn_meshdata[i].vpos) - cursorloc
-						context.active_object.vertexn_meshdata[i].vnormal = tempv.normalized()
+						tempv = verts_list[i].co - cursorloc
+						normals_data.cust_normals_pvertex[i] = tempv.normalized()
 	
 	# CUSTOM: generate for selected faces independently from mesh (or for the whole mesh)
 	elif (genmode == 'CUSTOM'):
 		if context.window_manager.edit_splitnormals:
-			for i in range(len(context.active_object.polyn_meshdata)):
-				tempface = context.active_object.polyn_meshdata[i]
+			for i in range(len(faces_list)):
 				f = faces_list[i]
 				if context.window_manager.vn_genselectiononly:
 					if f.select:
-						for j in range(len(tempface.vdata)):
+						for j in range(len(f.verts)):
 							fncount = 0
 							tempfvect = Vector((0.0,0.0,0.0))
 							if f.verts[j].select:
@@ -153,15 +166,15 @@ def generate_newnormals(context):
 										fncount += 1
 										tempfvect = tempfvect + vf.normal
 								if fncount > 0:
-									tempface.vdata[j].vnormal = (tempfvect / float(fncount)).normalized()
+									normals_data.cust_normals_ppoly[i][j] = (tempfvect / float(fncount)).normalized()
 				else:
-					for j in range(len(tempface.vdata)):
+					for j in range(len(f.verts)):
 						fncount = len(f.verts[j].link_faces)
 						tempfvect = Vector((0.0,0.0,0.0))
 						for vf in f.verts[j].link_faces:
 							if vf.select:
 								tempfvect = tempfvect + vf.normal
-						tempface.vdata[j].vnormal = (tempfvect / float(fncount)).normalized()
+						normals_data.cust_normals_ppoly[i][j] = (tempfvect / float(fncount)).normalized()
 		else:
 			for i in range(len(verts_list)):
 				v = verts_list[i]
@@ -174,13 +187,15 @@ def generate_newnormals(context):
 								fncount += 1
 								tempfvect = tempfvect + v.link_faces[j].normal
 						if fncount > 0:
-							context.active_object.vertexn_meshdata[i].vnormal = (tempfvect / float(fncount)).normalized()
+							normals_data.cust_normals_pvertex[i] = (tempfvect / float(fncount)).normalized()
 				else:
 					fncount = len(v.link_faces)
 					tempfvect = Vector((0.0,0.0,0.0))
 					for j in range(len(v.link_faces)):
 						tempfvect = tempfvect + v.link_faces[j].normal
-					context.active_object.vertexn_meshdata[i].vnormal = (tempfvect / float(fncount)).normalized()
+					normals_data.cust_normals_pvertex[i] = (tempfvect / float(fncount)).normalized()
+				
+	save_normalsdata(context)
 	
 	if (not context.window_manager.edit_splitnormals) and context.window_manager.vn_settomeshongen:
 		set_meshnormals(context)
@@ -189,59 +204,95 @@ def generate_newnormals(context):
 # create new normals list
 def reset_normals(context):
 	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	me.calc_normals()
 	me.update()
 	
-	context.window_manager.temp_copypastelist.clear()
 	if context.window_manager.edit_splitnormals:
-		context.active_object.polyn_meshdata.clear()
+		normals_data.cust_normals_ppoly.clear()
+		faces_list = [f for f in me.polygons]
+		verts_list = [v.normal for v in me.vertices]
 		
-		faces_list = [f for f in bm.faces]
 		for f in faces_list:
-			tempfacedata = context.active_object.polyn_meshdata.add()
-			tempfacedata.fcenter = f.calc_center_median()
-			
-			if 'vdata' not in tempfacedata:
-				tempfacedata['vdata'] = []
-			
-			tempverts = [v for v in f.verts]
-			for j in tempverts:
-				tempvertdata = tempfacedata.vdata.add()
-				tempvertdata.vpos = j.co
-				tempvertdata.vnormal = j.normal
+			normals_data.cust_normals_ppoly.append([])
+			for j in f.vertices:
+				normals_data.cust_normals_ppoly[len(normals_data.cust_normals_ppoly) - 1].append(verts_list[j].copy())
 		
-		if context.window_manager.convert_splitnormals and 'vertexn_meshdata' in context.active_object:
+		if context.window_manager.convert_splitnormals and len(normals_data.cust_normals_pvertex) > 0:
 			convert_pvertextoppoly(context)
 		
-		context.active_object.vertexn_meshdata.clear()
+		normals_data.cust_normals_pvertex.clear()
 	else:
-		context.active_object.vertexn_meshdata.clear()
-		verts_list = [v for v in bm.verts]
-		for v in verts_list:
-			tempvdata = context.active_object.vertexn_meshdata.add()
-			tempvdata.vpos = v.co
-			tempvdata.vnormal = v.normal
+		normals_data.cust_normals_pvertex.clear()
+		verts_list = [v.normal for v in me.vertices]
 		
-		if context.window_manager.convert_splitnormals and 'polyn_meshdata' in context.active_object:
+		for j in range(len(verts_list)):
+			normals_data.cust_normals_pvertex.append(verts_list[j].copy())
+		
+		if context.window_manager.convert_splitnormals and len(normals_data.cust_normals_ppoly) > 0:
 			convert_ppolytopvertex(context)
+		
+		normals_data.cust_normals_ppoly.clear()
+	
+	save_normalsdata(context)
+
+
+# load normals from saved data
+def load_normalsdata(context):
+	if context.window_manager.edit_splitnormals:
+		me = context.active_object.data
+		if len(context.active_object.polyn_meshdata) == len(me.polygons):
+			normals_data.cust_normals_ppoly.clear()
+			for f in context.active_object.polyn_meshdata:
+				normals_data.cust_normals_ppoly.append([])
+				for v in f.vdata:
+					normals_data.cust_normals_ppoly[len(normals_data.cust_normals_ppoly) - 1].append(v.vnormal.copy())
+	else:
+		me = context.active_object.data
+		if len(context.active_object.vertexn_meshdata) == len(me.vertices):
+			normals_data.cust_normals_pvertex.clear()
+			for v in context.active_object.vertexn_meshdata:
+				normals_data.cust_normals_pvertex.append(v.vnormal.copy())
+	
+
+
+def save_normalsdata(context):
+	if context.window_manager.edit_splitnormals:
+		if 'vertexn_meshdata' in context.active_object:
+			del context.active_object['vertexn_meshdata']
+		if 'polyn_meshdata' not in context.active_object:
+			context.active_object['polyn_meshdata'] = []
 		context.active_object.polyn_meshdata.clear()
+		
+		for f in normals_data.cust_normals_ppoly:
+			newface = context.active_object.polyn_meshdata.add()
+			for v in f:
+				newvert = newface.vdata.add()
+				newvert.vnormal = v.copy()
+	else:
+		if 'polyn_meshdata' in context.active_object:
+			del context.active_object['polyn_meshdata']
+		if 'vertexn_meshdata' not in context.active_object:
+			context.active_object['vertexn_meshdata'] = []
+		context.active_object.vertexn_meshdata.clear()
+		
+		for v in normals_data.cust_normals_pvertex:
+			newdata = context.active_object.vertexn_meshdata.add()
+			newdata.vnormal = v.copy()
+	
 
 
 # converts per poly normals list to per vertex
 def convert_ppolytopvertex(context):
 	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
+	#bm = bmesh.from_edit_mesh(me)
+	#me.update()
 	
-	faces_list = [f for f in bm.faces]
+	faces_list = [f for f in me.polygons]
 	used_indices = []
 	for i in range(len(faces_list)):
-		for j in range(len(faces_list[i].verts)):
-			if faces_list[i].verts[j].index not in used_indices:
-				context.active_object.vertexn_meshdata[faces_list[i].verts[j].index].vnormal = context.active_object.polyn_meshdata[i].vdata[j].vnormal
-				used_indices.append(faces_list[i].verts[j].index)
+		for j in range(len(faces_list[i].vertices)):
+			if faces_list[i].vertices[j] not in used_indices:
+				normals_data.cust_normals_pvertex[faces_list[i].vertices[j]] = normals_data.cust_normals_ppoly[i][j].copy()
+				used_indices.append(faces_list[i].vertices[j])
 	
 	return True
 
@@ -249,13 +300,13 @@ def convert_ppolytopvertex(context):
 # converts per vertex normals list to per poly
 def convert_pvertextoppoly(context):
 	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
+	#bm = bmesh.from_edit_mesh(me)
+	#me.update()
 	
-	faces_list = [f for f in bm.faces]
+	faces_list = [f for f in me.polygons]
 	for i in range(len(faces_list)):
-		for j in range(len(faces_list[i].verts)):
-			context.active_object.polyn_meshdata[i].vdata[j].vnormal = context.active_object.vertexn_meshdata[faces_list[i].verts[j].index].vnormal
+		for j in range(len(faces_list[i].vertices)):
+			normals_data.cust_normals_ppoly[i][j] = normals_data.cust_normals_pvertex[faces_list[i].vertices[j]].copy()
 	
 	return True
 
@@ -279,16 +330,17 @@ def vn_set_manual(context):
 			if faces_list[i].select:
 				if context.window_manager.vn_changeasone:
 					for j in range(len(faces_list[i].verts)):
-						context.active_object.polyn_meshdata[i].vdata[j].vnormal = context.window_manager.vn_curnormal_disp
+						normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_curnormal_disp)
 				else:
 					if context.window_manager.vn_selected_face < len(faces_list[i].verts):
 						if faces_list[i].verts[context.window_manager.vn_selected_face].select:
-							context.active_object.polyn_meshdata[i].vdata[context.window_manager.vn_selected_face].vnormal = context.window_manager.vn_curnormal_disp
+							normals_data.cust_normals_ppoly[i][context.window_manager.vn_selected_face] = Vector(context.window_manager.vn_curnormal_disp)
 	else:
 		verts_list = [v for v in bm.verts]
 		for i in range(len(verts_list)):
 			if verts_list[i].select:
-				context.active_object.vertexn_meshdata[i].vnormal = context.window_manager.vn_curnormal_disp
+				normals_data.cust_normals_pvertex[i] = context.window_manager.vn_curnormal_disp
+	save_normalsdata(context)
 
 
 # get current normal for manual edit (first selected vertex):
@@ -301,189 +353,138 @@ def vn_get(context):
 		for i in range(len(faces_list)):
 			if faces_list[i].select:
 				if context.window_manager.vn_selected_face < len(faces_list[i].verts):
-					context.window_manager.vn_curnormal_disp = context.active_object.polyn_meshdata[i].vdata[context.window_manager.vn_selected_face].vnormal
+					context.window_manager.vn_curnormal_disp = normals_data.cust_normals_ppoly[i][context.window_manager.vn_selected_face]
 					break
 				else:
 					context.window_manager.vn_selected_face = len(faces_list) - 1
-					context.window_manager.vn_curnormal_disp = context.active_object.polyn_meshdata[i].vdata[context.window_manager.vn_selected_face].vnormal
+					context.window_manager.vn_curnormal_disp = normals_data.cust_normals_ppoly[i][context.window_manager.vn_selected_face]
 					break
 	else:
 		verts_list = [v for v in bm.verts]
 		for i in range(len(verts_list)):
 			if verts_list[i].select:
-				context.window_manager.vn_curnormal_disp = context.active_object.vertexn_meshdata[i].vnormal
+				context.window_manager.vn_curnormal_disp = normals_data.cust_normals_pvertex[i]
 				break
 
 
-######################
-# 	Copy/Paste
-
-def copy_tempnormalslist(context):
-	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	context.window_manager.temp_copypastelist.clear()
+# bridge to Transfer Vertex Normals addon
+def transfer_normals(self, context):
+	mod = sys.modules["object_transfervertexnorms"]
+	if context.window_manager.normtrans_influence != 0.0:
+		if context.window_manager.normtrans_bounds != 'ONLY':
+			tempobjstr = context.window_manager.normtrans_sourceobj
+			sourceobj = context.scene.objects[tempobjstr]
+			if sourceobj != context.active_object:
+				mod.transferVertexNormals(self, context, sourceobj,
+						[context.active_object],
+						context.window_manager.normtrans_influence,
+						context.window_manager.normtrans_maxdist,
+						context.window_manager.normtrans_bounds)
+		else:
+			mod.joinBoundaryVertexNormals(self, context, 
+						[context.active_object],
+						context.window_manager.normtrans_influence,
+						context.window_manager.normtrans_maxdist)
 	
-	if context.window_manager.edit_splitnormals:
-		faceslist = [f for f in bm.faces]
-		findices = []
-		
-		for i in range(len(faceslist)):
-			vertlist = [v for v in faceslist[i].verts]
-			for j in range(len(vertlist)):
-				if vertlist[j].index not in findices:
-					if vertlist[j].select:
-						tempdata = context.window_manager.temp_copypastelist.add()
-						tempdata.vpos = context.active_object.polyn_meshdata[i].vdata[j].vpos
-						tempdata.vnormal = context.active_object.polyn_meshdata[i].vdata[j].vnormal
-						findices.append(vertlist[j].index)
-	else:
-		verts_list = [v for v in bm.verts]
-		for i in range(len(verts_list)):
-			if verts_list[i].select:
-				tempdata = context.window_manager.temp_copypastelist.add()
-				tempdata.vpos = context.active_object.vertexn_meshdata[i].vpos
-				tempdata.vnormal = context.active_object.vertexn_meshdata[i].vnormal
-
-
-def paste_tempnormalslist(context):
+	normals_data.cust_normals_pvertex.clear()
 	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
+	verts_list = [v.normal for v in me.vertices]
 	
-	if context.window_manager.edit_splitnormals:
-		faceslist = [f for f in bm.faces]
-		for i in range(len(faceslist)):
-			vertlist = [v for v in faceslist[i].verts]
-			for j in range(len(vertlist)):
-				if vertlist[j].select:
-					for k in context.window_manager.temp_copypastelist:
-						if in_distance(k.vpos, context.active_object.polyn_meshdata[i].vdata[j].vpos, 0.0001):
-							context.active_object.polyn_meshdata[i].vdata[j].vnormal = k.vnormal
-	else:
-		verts_list = [v for v in bm.verts]
-		for i in range(len(verts_list)):
-			if verts_list[i].select:
-				temploc = verts_list[i].co
-				for j in range(len(context.window_manager.temp_copypastelist)):
-					if in_distance(temploc, context.window_manager.temp_copypastelist[j].vpos, 0.0001):
-						context.active_object.vertexn_meshdata[i].vnormal = context.window_manager.temp_copypastelist[j].vnormal
+	for j in range(len(verts_list)):
+		normals_data.cust_normals_pvertex.append(verts_list[j].copy())
+	
+	save_normalsdata(context)
+	set_meshnormals(context)
+	
 
+
+# copy normals from adsn's addon to this one
+def copy_fromadsn(context):
+	if not context.window_manager.edit_splitnormals:
+		if 'vertex_normal_list' in context.active_object:
+			me = context.active_object.data
+			if len(context.active_object.vertex_normal_list) == len(me.vertices):
+				normals_data.cust_normals_pvertex.clear()
+				for v in context.active_object.vertex_normal_list:
+					normals_data.cust_normals_pvertex.append(Vector(v.normal))
+				save_normalsdata(context)
+				set_meshnormals(context)
+	
 
 ##############################
 # Display vertex normals:
 
 # draw gl line
 def draw_line(vertexloc, vertexnorm, scale):
-	x2 = (vertexnorm[0] * scale) + vertexloc[0]
-	y2 = (vertexnorm[1] * scale) + vertexloc[1]
-	z2 = (vertexnorm[2] * scale) + vertexloc[2]
 	bgl.glBegin(bgl.GL_LINES)
 	bgl.glVertex3f(vertexloc[0],vertexloc[1],vertexloc[2])
-	bgl.glVertex3f(x2,y2,z2)
+	bgl.glVertex3f(((vertexnorm[0] * scale) + vertexloc[0]),
+		((vertexnorm[1] * scale) + vertexloc[1]),
+		((vertexnorm[2] * scale) + vertexloc[2]))
 	bgl.glEnd()
-
 
 # Draw vertex normals handler
 def draw_vertex_normals(self, context):
-	if context.mode != "EDIT_MESH":
-		return
+	dispcol = context.window_manager.vn_displaycolor
+	scale = context.window_manager.vn_disp_scale
 	
 	bgl.glEnable(bgl.GL_BLEND)
 	bgl.glLineWidth(1.5)
-	bgl.glColor3f(context.window_manager.vn_displaycolor[0],context.window_manager.vn_displaycolor[1],context.window_manager.vn_displaycolor[2])
-	scale = context.window_manager.vn_disp_scale
+	bgl.glColor3f(dispcol[0],dispcol[1],dispcol[2])
 	
 	if context.window_manager.edit_splitnormals:
-		if 'polyn_meshdata' in context.active_object:
-			if context.window_manager.vndisp_selectiononly:
-				me = context.active_object.data
+		if normals_data.lastdisplaymesh == context.active_object.data.name:
+			me = context.active_object.data
+			if context.mode == "EDIT_MESH" and context.window_manager.vndisp_selectiononly:
 				bm = bmesh.from_edit_mesh(me)
-				fcount = 0
-				for m in context.active_object.polyn_meshdata:
-					[draw_line(v.vpos, v.vnormal, scale) for v in m.vdata if bm.faces[fcount].select]
-					fcount += 1
+				for i in range(len(bm.faces)):
+					if bm.faces[i].select:
+						for j in range(len(bm.faces[i].verts)):
+							draw_line(bm.faces[i].verts[j].co, normals_data.cust_normals_ppoly[i][j], scale)
 			else:
-				for m in context.active_object.polyn_meshdata:
-					[draw_line(v.vpos, v.vnormal, scale) for v in m.vdata]
+				for i in range(len(me.polygons)):
+					for j in range(len(me.polygons[i].vertices)):
+						draw_line(me.vertices[me.polygons[i].vertices[j]].co, normals_data.cust_normals_ppoly[i][j], scale)
+		else:
+			normals_data.lastdisplaymesh = ''
+			context.window_manager.showing_vnormals = -1
 	else:
-		if 'vertexn_meshdata' in context.active_object:
-			if context.window_manager.vndisp_selectiononly:
-				me = context.active_object.data
+		if normals_data.lastdisplaymesh == context.active_object.data.name:
+			me = context.active_object.data
+			if context.mode == "EDIT_MESH" and context.window_manager.vndisp_selectiononly:
 				bm = bmesh.from_edit_mesh(me)
-				[draw_line(context.active_object.vertexn_meshdata[v].vpos, context.active_object.vertexn_meshdata[v].vnormal, scale) for v in range(len(context.active_object.vertexn_meshdata)) if bm.verts[v].select]
+				for i in range(len(normals_data.cust_normals_pvertex)):
+					if bm.verts[i].select:
+						draw_line(bm.verts[i].co, normals_data.cust_normals_pvertex[i], scale)
 			else:
-				[draw_line(v.vpos, v.vnormal, scale) for v in context.active_object.vertexn_meshdata]
+				for i in range(len(normals_data.cust_normals_pvertex)):
+					draw_line(me.vertices[i].co, normals_data.cust_normals_pvertex[i], scale)
+		else:
+			normals_data.lastdisplaymesh = ''
+			context.window_manager.showing_vnormals = -1
+	
 	bgl.glDisable(bgl.GL_BLEND)
 
 
-# show normals on mesh (vertex mode only)
+# apply normals to mesh (vertex mode only)
 def set_meshnormals(context):
-	if not context.window_manager.edit_splitnormals and 'vertexn_meshdata' in context.active_object:
-		me = context.active_object.data
-		bm = bmesh.from_edit_mesh(me)
-		me.update()
-		verts_list = [v for v in bm.verts]
-		
-		for i in range(len(context.active_object.vertexn_meshdata)):
-			verts_list[i].normal = context.active_object.vertexn_meshdata[i].vnormal
-		
-		context.area.tag_redraw()
+	if context.mode == "EDIT_MESH":
+		if not context.window_manager.edit_splitnormals:
+			if len(normals_data.cust_normals_pvertex) > 0:
+				me = context.active_object.data
+				bm = bmesh.from_edit_mesh(me)
+				for i in range(len(bm.verts)):
+					bm.verts[i].normal = normals_data.cust_normals_pvertex[i]
+				context.area.tag_redraw()
+	elif context.mode == "OBJECT":
+		if not context.window_manager.edit_splitnormals:
+			if len(normals_data.cust_normals_pvertex) > 0:
+				me = context.active_object.data
+				for i in range(len(me.vertices)):
+					me.vertices[i].normal = normals_data.cust_normals_pvertex[i]
+				context.area.tag_redraw()
 
 
-# creates an object-space normal map in a vertex color layer
-def set_vertcolnormal(context):
-	me = context.active_object.data
-	me.update()
-	
-	waseditmode = context.mode == "EDIT_MESH"
-	
-	bpy.ops.object.mode_set(mode='OBJECT')
-	
-	tempindex = me.vertex_colors.find('normalscol')
-	if tempindex < 0:
-		bpy.ops.mesh.vertex_color_add()
-		templayer = me.vertex_colors[len(me.vertex_colors) - 1]
-		templayer.name = 'normalscol'
-	
-	nclayer = me.vertex_colors['normalscol']
-	
-	faces_list = [f for f in me.polygons]
-	vertices_list = [v for v in me.vertices]
-	
-	vcount = 0
-	for i in range(len(faces_list)):
-		verts_list = [v for v in faces_list[i].vertices]
-		for j in range(len(verts_list)):
-			#tempnorm = Vector(vertices_list[verts_list[j]].normal).normalized()
-			tempnorm = vertices_list[verts_list[j]].normal
-			tempcol = [0.0,0.0,0.0]
-			tempcol[0] = (tempnorm[0] + 1.0) * 0.5
-			tempcol[1] = ((-1.0 * tempnorm[1]) + 1.0) * 0.5
-			tempcol[2] = ((-1.0 * tempnorm[2]) + 1.0) * 0.5
-			#tempcol = tempcol.normalized()
-			
-			nclayer.data[vcount].color[0] = tempcol[0]
-			nclayer.data[vcount].color[1] = tempcol[1]
-			nclayer.data[vcount].color[2] = tempcol[2]
-			vcount += 1
-	
-	if waseditmode:
-		bpy.ops.object.mode_set(mode='EDIT')
+def cleanup_datavars():
+	normals_data.clear_normalsdata()
 
-
-def tangent_test(context):
-	me = context.active_object.data
-	bm = bmesh.from_edit_mesh(me)
-	me.update()
-	
-	loops_list = [f.loops for f in bm.faces]
-	
-	for i in range(len(loops_list)):
-		for j in range(len(loops_list[i])):
-			#tempvect = loops_list[i][j].calc_tangent()
-			tan = loops_list[i][j].calc_tangent()
-			#norm = loops_list[i][j].calc_normal()
-			norm = Vector(context.active_object.vertexn_meshdata[loops_list[i][j].vert.index].vnormal)
-			tempvect = (tan - (norm * norm.dot(tan))).normalized()
-			print (tempvect)
