@@ -22,7 +22,7 @@ _* A lot of this readme is obselete for version 1.0.0 *_
 _*Notes:*_ 
  
  
-_*v1.0.0 Test Releases:*_ 
+_*v1.0.0*_ 
  
 *Editor:* 
  
@@ -93,7 +93,15 @@ _*v1.0.0 Test Releases:*_
 - After some experiments with Mikk TSpace (which UE4 uses natively) it turns out that there is a slight difference in shading compared to UE4's automatically generated tangents.
 - I've added the option to export Blender's tangents which should be closer (or identical, in theory) but have the drawback of not working with custom normals. 
  
+ 
 ========================================================================================================= 
+
+_Reference for tangent space calculation:_
+
+Lengyel, Eric. “Computing Tangent Space Basis Vectors for an Arbitrary Mesh”. Terathon Software 3D Graphics Library, 2001. http://www.terathon.com/code/tangent.html
+
+========================================================================================================= 
+
 
 *Features:* 
  
@@ -225,8 +233,6 @@ Checking *Set to Mesh* will apply the generated results to the mesh when finishe
 
 *Transfer Normals:* 
 
-NOTE: This is a work in progress feature and requires the locations of the selected vertices to be identical. 
-
 *Copy* 
 - copies selected vertex normals to buffer 
 *Paste* 
@@ -265,19 +271,19 @@ Altered export settings:
 
 
 
-========================================================================================================= 
-Reference for tangent space calculation:
-
-Lengyel, Eric. “Computing Tangent Space Basis Vectors for an Arbitrary Mesh”. Terathon Software 3D Graphics Library, 2001. http://www.terathon.com/code/tangent.html
-
-
 
 ========================================================================================================= 
 Changelog: 
 
 
-
-*1.0.0t5* (current) 
+*1.0.0* (current) 
+ 
+- finished 7.3 exporter for everything except Animations, Lamps, Cameras
+- added remaining windowmanager variables to cleanup
+- minor formatting changes to scripts
+ 
+ 
+*1.0.0t5*
  
 - fixed problem with previous release that broke skeletal mesh exports
 - added ability to export combined vertex color layer

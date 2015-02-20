@@ -35,6 +35,7 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 	filename_ext = ".fbx"
 	filter_glob = StringProperty(default="*.fbx", options={'HIDDEN'})
 	
+	
 	object_types = EnumProperty(
 			name="Object Types",
 			options={'ENUM_FLAG','HIDDEN'},
@@ -44,11 +45,11 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 					('ARMATURE', "Armature", ""),
 					('MESH', "Mesh", "")
 					),
-			default={'ARMATURE', 'MESH'}
+			default={'EMPTY','ARMATURE','MESH'}
 			)
 	use_fbx2013export = BoolProperty(
-			name="Use FBX 2013",
-			description="Test new exporter",
+			name="",
+			description="Change FBX version",
 			default=False,
 			)
 	global_scale = FloatProperty(
@@ -70,26 +71,28 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 			default=False,
 			)
 	axis_forward = EnumProperty(
-			name="Forward Axis",
-			items=(('-Z', "* -Z", "- UE Default"),
+			name="Forward",
+			items=(('-Z', "* -Z", ""),
 					('-Y', "  -Y", ""),
 					('-X', "  -X", ""),
 					('Z', "   Z", ""),
 					('Y', "   Y", ""),
 					('X', "   X", "")
 					),
-			default='-Z'
+			default='-Z',
+			description="Forward Axis"
 			)
 	axis_up = EnumProperty(
-			name="Up Axis",
+			name="Up",
 			items=(('-Z', "  -Z", ""),
 					('-Y', "  -Y", ""),
 					('-X', "  -X", ""),
 					('Z', "   Z", ""),
-					('Y', " * Y", "- UE Default"),
+					('Y', " * Y", ""),
 					('X', "   X", "")
 					),
-			default='Y'
+			default='Y',
+			description="Up Axis"
 			)
 	mesh_smooth_type = EnumProperty(
 			name="Smoothing",
@@ -98,6 +101,7 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 					('EDGE', "Edge", "Write edge smoothing"),
 					),
 			default='FACE',
+			description="Smoothing type"
 			)
 	normals_export_mode = EnumProperty(
 			name="Normals",
@@ -106,12 +110,13 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 					('NORMEDIT', "FBX Tools", "Write normals from the included Vertex Normals Addon"),
 					('AUTO', "Automatic", "Automatically detect normals editor or use default normals")
 				),
-			default='AUTO'
+			default='AUTO',
+			description="Normals export mode"
 			)
 	export_tangentspace_base = EnumProperty(
 			name="Tangents",
 			items=(('DEFAULT', "Default", "Blender default (Mikk TSpace)"),
-					('LENGYEL', "Lengyel", "Custom implementation of Lengyel's method"),
+					('LENGYEL', "Custom", "Custom implementation of Lengyel's method"),
 					('NONE', " None ", "No tangents will be exported")
 					),
 			default='NONE'
@@ -187,6 +192,68 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 	def check(self, context):
 		is_def_change = super().check(context)
 		return (is_def_change)
+	
+	# new UI tab
+	def draw(self, context):
+		layout = self.layout
+		
+		if self.use_fbx2013export:
+			layout.prop(self, 'use_fbx2013export',	text='FBX Version: 7.3', toggle=True)
+		else:
+			layout.prop(self, 'use_fbx2013export',	text='FBX Version: 6.1', toggle=True)
+		
+		box = layout.box()
+		box.row().prop(self, 'object_types')
+		
+		if self.use_fbx2013export:
+			if 'CAMERA' in self.object_types or 'LAMP' in self.object_types:
+				box.row().label("Can't export Cameras and Lamps")
+		
+		box.row().prop(self, 'use_selection')
+		
+		row = box.row()
+		row.column().label("Axis:")
+		row.column().prop(self, 'axis_forward', text = '')
+		row.column().prop(self, 'axis_up', text = '')
+		box.row().prop(self, 'global_scale')
+		
+		if 'MESH' in self.object_types:
+			box = layout.box()
+			box.label("Mesh:")
+			box.row().prop(self, 'use_mesh_modifiers')
+			box.row().prop(self, 'use_armature_deform_only')
+			box.row().prop(self, 'merge_vertexcollayers')
+			
+			box = layout.box()
+			box.label("Shading:")
+			box.row().prop(self, 'mesh_smooth_type')
+			box.row().prop(self, 'normals_export_mode')
+			box.row().prop(self, 'export_tangentspace_base')
+			if self.export_tangentspace_base != 'NONE':	
+				showtanuv = True
+				if self.export_tangentspace_base == 'DEFAULT':
+					if self.normals_export_mode != 'BLEND':
+						box.row().label("*** Default normals required!")
+						showtanuv = False
+				if showtanuv and self.use_selection:
+					box.row().prop(self, 'tangentspace_uvlnum')
+		
+		# disabled in 7.3 for now
+		if not self.use_fbx2013export:
+			box = layout.box()
+			box.label("Animations:")
+			box.row().prop(self, 'use_anim')
+			if self.use_anim:
+				box.row().prop(self, 'use_anim_action_all')
+				box.row().prop(self, 'use_default_take')
+				box.row().prop(self, 'use_anim_optimize')
+				if self.use_anim_optimize:
+					box.row().prop(self, 'anim_optimize_precision')
+		else:
+			# make sure anims don't export
+			if self.use_anim:
+				self.use_anim = False
+		
 	
 	def execute(self, context):
 		from mathutils import Matrix

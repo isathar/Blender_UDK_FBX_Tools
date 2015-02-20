@@ -23,6 +23,7 @@
 # based on the fbx export script included in < Blender v2.68 (6.1 ASCII)
 # original script created by and copyright (c) Campbell Barton
 #
+#
 # Changes by isathar:
 #
 # - tangent + binormal calculation (*)
@@ -30,6 +31,8 @@
 # - Normals are exported as PerPolyVertex
 # - list lookup speed optimizations
 # - XNA tweaks disabled for now
+# - some changes to the organization of exported files
+# -- based on fbx converter output
 #
 #  UE-specific:
 # - for armatures: root bone is parented to the scene instead of an armature object
@@ -3262,7 +3265,12 @@ Takes:  {''')
 			for my_arm in ob_arms:
 				if my_arm.blenObject.animation_data:
 					my_arm.blenObject.animation_data.action = my_arm.blenAction
-
+		
+		# end action loop. set original actions
+		# do this after every loop in case actions effect eachother.
+		for my_arm in ob_arms:
+			if my_arm.blenObject.animation_data:
+				my_arm.blenObject.animation_data.action = my_arm.blenAction
 		fw('\n}')
 
 		scene.frame_set(frame_orig)
@@ -3440,7 +3448,9 @@ def save(operator, context,
 
 		# no active scene changing!
 		# bpy.data.scenes.active = orig_sce
-
+		
+		
+		
 		return {'FINISHED'}  # so the script wont run after we have batch exported.
 
 # removed application requirements section

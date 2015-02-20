@@ -21,7 +21,7 @@ def in_distance(p1, p2, checkdist):
 
 # generate new normals based on preset
 def generate_newnormals(self, context):
-	genmode = context.window_manager.vn_generatemode
+	genmode = context.window_manager.vn_genmode
 	me = context.active_object.data
 	bm = bmesh.new()
 	
@@ -70,19 +70,19 @@ def generate_newnormals(self, context):
 				for i in range(len(normals_data.cust_normals_ppoly)):
 					for j in range(len(normals_data.cust_normals_ppoly[i])):
 						if faces_list[i].verts[j].select:
-							normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_directionalvector)
+							normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_dirvector)
 			else:
 				for i in range(len(normals_data.cust_normals_ppoly)):
 					for j in range(len(normals_data.cust_normals_ppoly[i])):
-						normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_directionalvector)
+						normals_data.cust_normals_ppoly[i][j] = Vector(context.window_manager.vn_dirvector)
 		else:
 			if context.window_manager.vn_genselectiononly:
 				for i in range(len(verts_list)):
 					if verts_list[i].select:
-						normals_data.cust_normals_pvertex[i] = Vector(context.window_manager.vn_directionalvector)
+						normals_data.cust_normals_pvertex[i] = Vector(context.window_manager.vn_dirvector)
 			else:
 				for i in range(len(verts_list)):
-					normals_data.cust_normals_pvertex[i] = Vector(context.window_manager.vn_directionalvector)
+					normals_data.cust_normals_pvertex[i] = Vector(context.window_manager.vn_dirvector)
 	
 	# BENT: Bent from point (3D cursor)
 	elif (genmode == 'BENT'):
@@ -483,3 +483,8 @@ def set_meshnormals(context):
 				for i in range(len(me.vertices)):
 					me.vertices[i].normal = normals_data.cust_normals_pvertex[i]
 				context.area.tag_redraw()
+
+
+def cleanup_datavars():
+	normals_data.clear_normalsdata()
+
