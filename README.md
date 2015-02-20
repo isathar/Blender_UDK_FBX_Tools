@@ -7,6 +7,10 @@ Blender addon that adds an editor for custom vertex normals, and an exporter wit
 *Compatible with Blender v2.70+* 
  
 _* A lot of this readme is obselete for version 1.0.0 *_ 
+
+
+ 
+New Documentation coming soon. 
  
  
 ========================================================================================================= 
@@ -57,7 +61,7 @@ _*v1.0.0*_
 *Exporter:* 
  
 - To export files with the 7.3 exporter, select 'Use FBX 2013' in the export panel.
-  - The new FBX 7.3 exporter should be able to export everything except animations at the moment. 
+  - The new FBX 7.3 exporter should be able to export everything except animations, cameras and lights at the moment. 
  
 - The importer currently works with FBX 6.1 files only. 
  
