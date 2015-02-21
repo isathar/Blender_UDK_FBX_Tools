@@ -3954,13 +3954,15 @@ Objects:  {''')
 		if isBone:
 			tempname = exporter_data.get_fbx_BoneID(tempobj.fbxName)
 		else:
-			tempname = exporter_data.get_fbx_MeshID(tempobj.name)
+			if tempobj:
+				tempname = exporter_data.get_fbx_MeshID(tempobj.name)
 		
-		fw('\n\t\tPoseNode:  {')
-		fw('\n\t\t\tNode: %i' % tempname)
-		fw('\n\t\t\tMatrix: *16 {')
-		fw('\n\t\t\t\ta: %s' % mat4x4str(matrix if matrix else Matrix()))
-		fw('\n\t\t\t}\n\t\t}')
+		if tempobj:
+			fw('\n\t\tPoseNode:  {')
+			fw('\n\t\t\tNode: %i' % tempname)
+			fw('\n\t\t\tMatrix: *16 {')
+			fw('\n\t\t\t\ta: %s' % mat4x4str(matrix if matrix else Matrix()))
+			fw('\n\t\t\t}\n\t\t}')
 	fw('\n\t}')
 	
 	#if 'CAMERA' in object_types:
