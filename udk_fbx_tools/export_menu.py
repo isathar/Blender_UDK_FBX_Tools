@@ -47,11 +47,6 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 					),
 			default={'EMPTY','ARMATURE','MESH'}
 			)
-	use_fbx2013export = BoolProperty(
-			name="",
-			description="Change FBX version",
-			default=False,
-			)
 	global_scale = FloatProperty(
 			name="Scale",
 			description=("Scale all data "
@@ -197,17 +192,8 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 	def draw(self, context):
 		layout = self.layout
 		
-		if self.use_fbx2013export:
-			layout.prop(self, 'use_fbx2013export',	text='FBX Version: 7.3', toggle=True)
-		else:
-			layout.prop(self, 'use_fbx2013export',	text='FBX Version: 6.1', toggle=True)
-		
 		box = layout.box()
 		box.row().prop(self, 'object_types')
-		
-		if self.use_fbx2013export:
-			if 'CAMERA' in self.object_types or 'LAMP' in self.object_types:
-				box.row().label("Can't export Cameras and Lamps")
 		
 		box.row().prop(self, 'use_selection')
 		
@@ -238,21 +224,15 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 				if showtanuv and self.use_selection:
 					box.row().prop(self, 'tangentspace_uvlnum')
 		
-		# disabled in 7.3 for now
-		if not self.use_fbx2013export:
-			box = layout.box()
-			box.label("Animations:")
-			box.row().prop(self, 'use_anim')
-			if self.use_anim:
-				box.row().prop(self, 'use_anim_action_all')
-				box.row().prop(self, 'use_default_take')
-				box.row().prop(self, 'use_anim_optimize')
-				if self.use_anim_optimize:
-					box.row().prop(self, 'anim_optimize_precision')
-		else:
-			# make sure anims don't export
-			if self.use_anim:
-				self.use_anim = False
+		box = layout.box()
+		box.label("Animations:")
+		box.row().prop(self, 'use_anim')
+		if self.use_anim:
+			box.row().prop(self, 'use_anim_action_all')
+			box.row().prop(self, 'use_default_take')
+			box.row().prop(self, 'use_anim_optimize')
+			if self.use_anim_optimize:
+				box.row().prop(self, 'anim_optimize_precision')
 		
 	
 	def execute(self, context):
@@ -267,13 +247,9 @@ class ExportFBX(bpy.types.Operator, ExportHelper):
 		
 		global_matrix = (global_matrix * axis_conversion(to_forward=self.axis_forward,to_up=self.axis_up,).to_4x4())
 		
-		keywords = self.as_keywords(ignore=("check_existing","filter_glob","axis_forward","axis_up","use_fbx2013export"))
+		keywords = self.as_keywords(ignore=("check_existing","filter_glob","axis_forward","axis_up"))
 		keywords["global_matrix"] = global_matrix
 		
-		if self.use_fbx2013export:
-			from . import export_fbx730
-			return export_fbx730.save(self, context, **keywords)
-		else:
-			from . import export_fbx
-			return export_fbx.save(self, context, **keywords)
+		from . import export_fbx
+		return export_fbx.save(self, context, **keywords)
 
