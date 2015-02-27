@@ -74,7 +74,7 @@ class vertex_normals_panel(bpy.types.Panel):
 						text='Apply to Mesh')
 				
 				if 'vertex_normal_list' in context.active_object:
-					row.operator('object.copy_normals_recalcvertexnormals', 
+					box2.row().operator('object.copy_normals_recalcvertexnormals', 
 							text='Copy from RVN')
 				
 			# Auto Generate
