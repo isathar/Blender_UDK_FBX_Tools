@@ -91,8 +91,8 @@ _*v1.0.0*_
  
  
 *Tangents and Unreal Engine 4:*
-- After some experiments with Mikk TSpace (which UE4 uses natively) it turns out that there is a slight difference in shading compared to UE4's automatically generated tangents.
-- I've added the option to export Blender's tangents which should be closer (or identical, in theory) but have the drawback of not working with custom normals. 
+- Custom tangents are not calculculated using Mikk TSpace, so there will be a difference in shading when importing them to UE4.
+- I've added the option to export Blender's tangents which should be identical to UE4's to but have the drawback of not accounting for custom normals. 
  
  
 ========================================================================================================= 
