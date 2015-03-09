@@ -6,12 +6,6 @@ Blender addon that adds an editor for custom vertex normals, and an exporter wit
  
 *Compatible with Blender v2.70+* 
  
-_* A lot of this readme is obselete for version 1.0.0 *_ 
-
-
- 
-New Documentation coming soon. 
- 
  
 ========================================================================================================= 
  
@@ -25,8 +19,18 @@ New Documentation coming soon.
  
 _*Notes:*_ 
  
+  
+*now testing basic support for Mont29's Blender build 2.72 with custom split normals* 
+- https://mont29.wordpress.com/2014/08/22/custom-split-normals-second-testbuild-available/
+- To use:
+  - select *Split Normals* mode in the *Set Split Normals* properties
+  - enable 'Split Normals Modifier' under mesh data in the normals editor's panel
+  - Changes made in Object mode will be applied automatically,
+  - to apply changes made in edit mode, switch to Object mode and click 'Apply to Mesh'
+- Exporting:
+  - Set Normals mode (and Tangents if needed) to Default in the export menu
+  - Custom tangents from my exporter are not needed when using Mont29's build since it makes Blender use custom normals for its tangent calculation 
  
-_*v1.0.0*_ 
  
 *Editor:* 
  
@@ -77,6 +81,8 @@ _*v1.0.0*_
 *Displaying Normals on Meshes:* 
 - Normals can be applied to the mesh in Vertex Mode, but not in Poly Mode. Both modes support displaying normals as 3D lines.
 - The mesh's displayed normals will reset every time you enter Blender's Edit Mode, and can be reset by clicking _Apply to Mesh_ again.
+- If you're using Mont29's Blender build with custom split normals:
+  - checking *Split Normals Modifier* under Mesh Data will allow normals to be applied in both editor modes. 
  
  
 *Export Time:* 
@@ -155,15 +161,19 @@ _Importer for Normals (FBX 6.1 files only):_
 ========================================================================================================= 
 Changelog: 
 
+*1.0.1* (current) 
 
-*1.0.0* (current) 
+- removed 7.3 exporter due to many issues
+- added preliminary support for Mont29's Blender 2.72 build 
+ 
+*1.0.0* 
  
 - finished 7.3 exporter for everything except Animations, Lamps, Cameras
 - added remaining windowmanager variables to cleanup
-- minor formatting changes to scripts
+- minor formatting changes to scripts 
  
  
-*1.0.0t5*
+*1.0.0t5* 
  
 - fixed problem with previous release that broke skeletal mesh exports
 - added ability to export combined vertex color layer

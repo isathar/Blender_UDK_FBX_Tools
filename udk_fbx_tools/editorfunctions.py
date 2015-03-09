@@ -477,12 +477,27 @@ def set_meshnormals(context):
 					bm.verts[i].normal = normals_data.cust_normals_pvertex[i]
 				context.area.tag_redraw()
 	elif context.mode == "OBJECT":
-		if not context.window_manager.edit_splitnormals:
-			if len(normals_data.cust_normals_pvertex) > 0:
-				me = context.active_object.data
-				for i in range(len(me.vertices)):
-					me.vertices[i].normal = normals_data.cust_normals_pvertex[i]
-				context.area.tag_redraw()
+		if "Set Split Normals" in context.active_object.modifiers and context.window_manager.use_mont29_normals:
+			me = context.active_object.data
+			me.create_normals_split()
+			me.validate()
+			if not context.window_manager.edit_splitnormals:
+				normalslist = tuple(tuple(v) for v in normals_data.cust_normals_pvertex)
+				me.use_auto_smooth = True
+				me.define_normals_split_custom_from_vertices(normalslist)
+			else:
+				normalslist = ()
+				for f in normals_data.cust_normals_ppoly:
+					normalslist = normalslist + tuple(tuple(l.vnormal) for l in f)
+				me.use_auto_smooth = True
+				me.define_normals_split_custom(normalslist)
+		else:
+			if not context.window_manager.edit_splitnormals:
+				if len(normals_data.cust_normals_pvertex) > 0:
+					me = context.active_object.data
+					for i in range(len(me.vertices)):
+						me.vertices[i].normal = normals_data.cust_normals_pvertex[i]
+					context.area.tag_redraw()
 
 
 def cleanup_datavars():

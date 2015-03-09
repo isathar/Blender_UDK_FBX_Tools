@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "UE FBX Normals Tools",
 	"author": "Andreas Wiehn (isathar)",
-	"version": (1, 0, 0),
+	"version": (1, 0, 1),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
 	"description": "Vertex normal editor + modified FBX exporter for "
@@ -13,7 +13,6 @@ bl_info = {
 
 
 import bpy
-from bpy.types import Panel
 import sys
 
 from . import export_menu
@@ -66,17 +65,26 @@ class vertex_normals_panel(bpy.types.Panel):
 				box2.row().operator('object.reset_polydata', text='Reset')
 				box2.row().operator('object.clear_polydata', text='Clear')
 				
-				box2.row().operator('object.switch_normalsmode', 
-						text='Switch Mode')
 				box2.row().prop(context.window_manager,'convert_splitnormals',
 						text='Convert on Switch')
+				box2.row().operator('object.switch_normalsmode', 
+						text='Switch Mode')
+				
+				custnrow = box2.row()
+				custnrow.prop(context.window_manager,'use_mont29_normals',
+						text='Split Normals Modifier')
+				if "Set Split Normals" not in context.active_object.modifiers:
+					if context.window_manager.use_mont29_normals:
+						context.window_manager.use_mont29_normals = False
+					custnrow.enabled = False
+					
 				box2.row().operator('object.display_normalsonmesh', 
 						text='Apply to Mesh')
 				
 				if 'vertex_normal_list' in context.active_object:
 					box2.row().operator('object.copy_normals_recalcvertexnormals', 
 							text='Copy from RVN')
-				
+			
 			# Auto Generate
 			genmode = context.window_manager.vn_genmode
 			box = layout.box()
@@ -118,8 +126,6 @@ class vertex_normals_panel(bpy.types.Panel):
 						'vn_genmode', text='')
 				box2.row().operator('object.generate_vnormals',
 						text='Generate')
-				#else:
-				#	box.box().row().label("Edit Mode required", 'NONE')
 			
 			# Transfer Normals
 			box = layout.box()
@@ -218,6 +224,7 @@ class vertex_normals_panel(bpy.types.Panel):
 								text='Load')
 				elif 'vertexn_meshdata' in context.active_object:
 					box.row().operator('object.load_polydata', text='Load')
+
 
 
 # reset data to default normals
@@ -533,6 +540,8 @@ def initdefaults():
 	types.WindowManager.convert_splitnormals = bpy.props.BoolProperty(
 			default=False,
 			description="Convert current normals on mode switch")
+	types.WindowManager.use_mont29_normals = bpy.props.BoolProperty(
+			default=False, description='Use Split Normals Modifier')
 	# generate
 	types.WindowManager.vn_genmode = bpy.props.EnumProperty(
 			name="Mode",
@@ -638,7 +647,7 @@ def initdefaults():
 
 
 def clearvars():
-	props = ['edit_splitnormals','convert_splitnormals','vn_genmode',
+	props = ['edit_splitnormals','convert_splitnormals','use_mont29_normals','vn_genmode',
 	'vn_genselectiononly','vn_genignorehidden','vn_genbendingratio',
 	'vn_centeroffset','vn_dirvector','vn_settomeshongen','vn_realtimeedit',
 	'vn_changeasone','vn_selected_face','vn_curnormal_disp',
