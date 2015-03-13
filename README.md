@@ -23,8 +23,6 @@ _*Notes:*_
 *now testing basic support for Mont29's Blender build 2.72/2.73 with custom split normals* 
 - https://mont29.wordpress.com
 - To use:
-  - select *Split Normals* mode in the *Set Split Normals* modifier's properties
-  - enable 'Split Normals Modifier' under mesh data in the normals editor's panel
   - Changes made in Object mode will be applied automatically,
   - to apply changes made in edit mode, switch to Object mode and click 'Apply to Mesh'
 - Exporting:
