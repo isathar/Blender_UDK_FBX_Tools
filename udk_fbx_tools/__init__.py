@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "UE FBX Normals Tools",
 	"author": "Andreas Wiehn (isathar)",
-	"version": (1, 0, 0),
+	"version": (1, 0, 2),
 	"blender": (2, 70, 0),
 	"location": "View3D > Toolbar",
 	"description": "Vertex normal editor + modified FBX exporter for "
@@ -13,7 +13,6 @@ bl_info = {
 
 
 import bpy
-from bpy.types import Panel
 import sys
 
 from . import export_menu
@@ -41,6 +40,8 @@ class vertex_normals_panel(bpy.types.Panel):
 	def draw(self, context):
 		layout = self.layout
 		
+		usingMontBuild = hasattr(context.active_object.data, "define_normals_split_custom")
+		
 		# check if editor tab should be visible
 		showeditor = False
 		if context.window_manager.edit_splitnormals:
@@ -66,17 +67,18 @@ class vertex_normals_panel(bpy.types.Panel):
 				box2.row().operator('object.reset_polydata', text='Reset')
 				box2.row().operator('object.clear_polydata', text='Clear')
 				
-				box2.row().operator('object.switch_normalsmode', 
-						text='Switch Mode')
 				box2.row().prop(context.window_manager,'convert_splitnormals',
 						text='Convert on Switch')
+				box2.row().operator('object.switch_normalsmode', 
+						text='Switch Mode')
+				
 				box2.row().operator('object.display_normalsonmesh', 
 						text='Apply to Mesh')
 				
 				if 'vertex_normal_list' in context.active_object:
 					box2.row().operator('object.copy_normals_recalcvertexnormals', 
 							text='Copy from RVN')
-				
+			
 			# Auto Generate
 			genmode = context.window_manager.vn_genmode
 			box = layout.box()
@@ -101,7 +103,7 @@ class vertex_normals_panel(bpy.types.Panel):
 							'vn_genselectiononly',
 							text='Selected Only')
 					
-					if not context.window_manager.edit_splitnormals:
+					if usingMontBuild or not context.window_manager.edit_splitnormals:
 						box2.row().column().prop(context.window_manager,
 								'vn_settomeshongen',
 								text='Apply to Mesh')
@@ -118,8 +120,6 @@ class vertex_normals_panel(bpy.types.Panel):
 						'vn_genmode', text='')
 				box2.row().operator('object.generate_vnormals',
 						text='Generate')
-				#else:
-				#	box.box().row().label("Edit Mode required", 'NONE')
 			
 			# Transfer Normals
 			box = layout.box()
@@ -220,6 +220,7 @@ class vertex_normals_panel(bpy.types.Panel):
 					box.row().operator('object.load_polydata', text='Load')
 
 
+
 # reset data to default normals
 class reset_polydata(bpy.types.Operator):
 	bl_idname = 'object.reset_polydata'
@@ -279,7 +280,7 @@ class load_polydata(bpy.types.Operator):
 	bl_label = 'Load Normals Data'
 	bl_description = 'Load mesh data struct'
 	bl_options = {'REGISTER', 'UNDO'}
-	# undo doesn't work for this since no data is changed
+	# undo doesn't work for this since no mesh data is changed
 	
 	@classmethod
 	def poll(cls, context):
@@ -341,7 +342,6 @@ class show_vertexnormals(bpy.types.Operator):
 	bl_label = 'Show Normals'
 	bl_description = 'Display custom normals as 3D lines'
 	
-	
 	_handle = None
 	
 	@classmethod
@@ -398,13 +398,9 @@ class generate_vnormals(bpy.types.Operator):
 	
 	@classmethod
 	def poll(cls, context):
-		#if context.mode=="EDIT_MESH":
 		if context.window_manager.edit_splitnormals:
-			if len(editorfunctions.normals_data.cust_normals_ppoly) > 0:
-				return True
-		elif len(editorfunctions.normals_data.cust_normals_pvertex) > 0:
-			return True
-		return False
+			return len(editorfunctions.normals_data.cust_normals_ppoly) > 0
+		return len(editorfunctions.normals_data.cust_normals_pvertex) > 0
 	
 	def execute(self, context):
 		editorfunctions.generate_newnormals(self, context)
@@ -413,7 +409,7 @@ class generate_vnormals(bpy.types.Operator):
 
 
 
-# 	display normals on mesh (perpoly only)
+# 	display normals on mesh (perpoly mode or Mont29's build only)
 class display_normalsonmesh(bpy.types.Operator):
 	bl_idname = 'object.display_normalsonmesh'
 	bl_label = 'Display Normals'
@@ -422,9 +418,15 @@ class display_normalsonmesh(bpy.types.Operator):
 	
 	@classmethod
 	def poll(cls, context):
-		if not context.window_manager.edit_splitnormals:
-			if len(editorfunctions.normals_data.cust_normals_pvertex) > 0:
-				return True
+		if context.active_object != None:
+			if hasattr(context.active_object.data, "define_normals_split_custom"):
+				if not context.window_manager.edit_splitnormals:
+					return len(editorfunctions.normals_data.cust_normals_pvertex) > 0
+				else:
+					return len(editorfunctions.normals_data.cust_normals_ppoly) > 0
+			else:
+				if not context.window_manager.edit_splitnormals:
+					return len(editorfunctions.normals_data.cust_normals_pvertex) > 0
 		return False
 	
 	def execute(self, context):
@@ -502,14 +504,11 @@ class copy_normals_recalcvertexnormals(bpy.types.Operator):
 # mesh data lists:
 
 class vert_data(bpy.types.PropertyGroup):
-	vnormal = bpy.props.FloatVectorProperty(default=(
-												0.00000000,
-												0.00000000,
-												0.00000000
-												),
-											subtype='DIRECTION',
-											precision=6
-											)
+	vnormal = bpy.props.FloatVectorProperty(
+		default=(0.00000000,0.00000000,0.00000000),
+		subtype='DIRECTION',
+		precision=6
+	)
 
 class normalslist_polymode(bpy.types.PropertyGroup):
 	vdata = bpy.props.CollectionProperty(type=vert_data)
@@ -602,7 +601,6 @@ def initdefaults():
 	types.WindowManager.vn_displaycolor = bpy.props.FloatVectorProperty(
 			default=(0.0,1.0,0.0),subtype='COLOR',max=1.0,min=0.0,
 			description='Normals Color')
-	
 	
 	# Transfer Vertex Normals:
 	types.WindowManager.normtrans_sourceobj = bpy.props.StringProperty(

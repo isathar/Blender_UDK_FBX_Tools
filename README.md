@@ -6,12 +6,6 @@ Blender addon that adds an editor for custom vertex normals, and an exporter wit
  
 *Compatible with Blender v2.70+* 
  
-_* A lot of this readme is obselete for version 1.0.0 *_ 
-
-
- 
-New Documentation coming soon. 
- 
  
 ========================================================================================================= 
  
@@ -25,8 +19,18 @@ New Documentation coming soon.
  
 _*Notes:*_ 
  
+  
+*now testing basic support for Mont29's Blender build 2.72 with custom split normals* 
+- https://mont29.wordpress.com/2014/08/22/custom-split-normals-second-testbuild-available/
+- To use:
+  - select *Split Normals* mode in the *Set Split Normals* modifier's properties
+  - enable 'Split Normals Modifier' under mesh data in the normals editor's panel
+  - Changes made in Object mode will be applied automatically,
+  - to apply changes made in edit mode, switch to Object mode and click 'Apply to Mesh'
+- Exporting:
+  - Set Normals mode (and Tangents if needed) to Default in the export menu
+  - Custom tangents from my exporter are not needed when using Mont29's build since it makes Blender use custom normals for its tangent calculation 
  
-_*v1.0.0*_ 
  
 *Editor:* 
  
@@ -77,6 +81,8 @@ _*v1.0.0*_
 *Displaying Normals on Meshes:* 
 - Normals can be applied to the mesh in Vertex Mode, but not in Poly Mode. Both modes support displaying normals as 3D lines.
 - The mesh's displayed normals will reset every time you enter Blender's Edit Mode, and can be reset by clicking _Apply to Mesh_ again.
+- If you're using Mont29's Blender build with custom split normals:
+  - checking *Split Normals Modifier* under Mesh Data will allow normals to be applied in both editor modes. 
  
  
 *Export Time:* 
@@ -91,8 +97,8 @@ _*v1.0.0*_
  
  
 *Tangents and Unreal Engine 4:*
-- After some experiments with Mikk TSpace (which UE4 uses natively) it turns out that there is a slight difference in shading compared to UE4's automatically generated tangents.
-- I've added the option to export Blender's tangents which should be closer (or identical, in theory) but have the drawback of not working with custom normals. 
+- Custom tangents are not calculculated using Mikk TSpace, so there will be a difference in shading when importing them to UE4.
+- I've added the option to export Blender's tangents which should be identical to UE4's to but have the drawback of not accounting for custom normals. 
  
  
 ========================================================================================================= 
@@ -147,23 +153,37 @@ _Importer for Normals (FBX 6.1 files only):_
 *Documentation:* 
 
 
-- soon
+- probably next week  
 
 
 
 
 ========================================================================================================= 
 Changelog: 
-
-
-*1.0.0* (current) 
+  
+*1.0.2* (current) 
+  
+- fix to custom normals generation in poly mode when 'selected only' was unchecked
+- added detection of Mont29's build to generation functions (automatically sets normals now)
+- moved custom tangents functions since they aren't really needed anymore in newer Blender builds
+- default tangents can now be exported if default normals are automatically detected by the exporter
+- minor fix to the way vertex color layers are written  
+  
+  
+*1.0.1* 
+  
+- removed 7.3 exporter due to many issues
+- added preliminary support for Mont29's Blender 2.72 build 
  
+ 
+*1.0.0* 
+  
 - finished 7.3 exporter for everything except Animations, Lamps, Cameras
 - added remaining windowmanager variables to cleanup
-- minor formatting changes to scripts
+- minor formatting changes to scripts 
  
  
-*1.0.0t5*
+*1.0.0t5* 
  
 - fixed problem with previous release that broke skeletal mesh exports
 - added ability to export combined vertex color layer

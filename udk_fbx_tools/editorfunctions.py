@@ -1,4 +1,4 @@
-# Helper functions for FBX Tools
+# Helper functions for Normals Editor
 
 import bpy
 import bmesh
@@ -151,6 +151,9 @@ def generate_newnormals(self, context):
 						normals_data.cust_normals_pvertex[i] = tempv.normalized()
 	
 	# CUSTOM: generate for selected faces independently from mesh (or for the whole mesh)
+	# - based on existing face nomals, so the mesh requires faces
+	# - seems to be weighted by mesh topology when used in poly mode
+	#   - number of intersecting edges on connected face influences the direction
 	elif (genmode == 'CUSTOM'):
 		if context.window_manager.edit_splitnormals:
 			for i in range(len(faces_list)):
@@ -172,8 +175,7 @@ def generate_newnormals(self, context):
 						fncount = len(f.verts[j].link_faces)
 						tempfvect = Vector((0.0,0.0,0.0))
 						for vf in f.verts[j].link_faces:
-							if vf.select:
-								tempfvect = tempfvect + vf.normal
+							tempfvect = tempfvect + vf.normal
 						normals_data.cust_normals_ppoly[i][j] = (tempfvect / float(fncount)).normalized()
 		else:
 			for i in range(len(verts_list)):
@@ -197,7 +199,7 @@ def generate_newnormals(self, context):
 				
 	save_normalsdata(context)
 	
-	if (not context.window_manager.edit_splitnormals) and context.window_manager.vn_settomeshongen:
+	if (hasattr(context.active_object.data, "define_normals_split_custom") or not context.window_manager.edit_splitnormals) and context.window_manager.vn_settomeshongen:
 		set_meshnormals(context)
 
 
@@ -477,12 +479,29 @@ def set_meshnormals(context):
 					bm.verts[i].normal = normals_data.cust_normals_pvertex[i]
 				context.area.tag_redraw()
 	elif context.mode == "OBJECT":
-		if not context.window_manager.edit_splitnormals:
-			if len(normals_data.cust_normals_pvertex) > 0:
-				me = context.active_object.data
-				for i in range(len(me.vertices)):
-					me.vertices[i].normal = normals_data.cust_normals_pvertex[i]
-				context.area.tag_redraw()
+		if hasattr(context.active_object.data, "define_normals_split_custom"):
+			me = context.active_object.data
+			me.create_normals_split()
+			me.validate()
+			if not context.window_manager.edit_splitnormals:
+				normalslist = tuple(tuple(v) for v in normals_data.cust_normals_pvertex)
+				me.use_auto_smooth = True
+				me.free_normals_split()
+				me.define_normals_split_custom_from_vertices(normalslist)
+			else:
+				normalslist = ()
+				for f in normals_data.cust_normals_ppoly:
+					normalslist = normalslist + tuple(tuple(l) for l in f)
+				me.use_auto_smooth = True
+				me.free_normals_split()
+				me.define_normals_split_custom(normalslist)
+		else:
+			if not context.window_manager.edit_splitnormals:
+				if len(normals_data.cust_normals_pvertex) > 0:
+					me = context.active_object.data
+					for i in range(len(me.vertices)):
+						me.vertices[i].normal = normals_data.cust_normals_pvertex[i]
+					context.area.tag_redraw()
 
 
 def cleanup_datavars():

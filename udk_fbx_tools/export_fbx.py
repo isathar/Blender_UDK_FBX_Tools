@@ -15,9 +15,8 @@
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # ##### END GPL LICENSE BLOCK #####
-
-
-
+#
+#
 # NOTES:
 #
 # based on the fbx export script included in < Blender v2.68 (6.1 ASCII)
@@ -26,7 +25,7 @@
 #
 # Changes by isathar:
 #
-# - tangent + binormal calculation (*)
+# - reads or calculates tangents + binormals
 # - custom normals support for fbx normals editor and adsn's Recalc Vertex Normals addon
 # - Normals are exported as PerPolyVertex
 # - list lookup speed optimizations
@@ -36,18 +35,12 @@
 #
 #  UE-specific:
 # - for armatures: root bone is parented to the scene instead of an armature object
+#   - from fbx converter output for a test file converted from 7.3 binary to 6.1 ascii
+#   - doesn't seem to be standard, but works for UE
 # - some changes made to rotation handling to accommodate for this
 # - axis conversion options altered
-# - tangent space close to UDK's auto-generated tangents
+# - custom tangents are close to UDK's auto-generated ones, but won't be needed soon
 #
-#
-# (*) Tangent space calculation based on:
-# Lengyel, Eric. “Computing Tangent Space Basis Vectors for an Arbitrary Mesh”. Terathon Software 3D Graphics Library, 2001. 
-# http://www.terathon.com/code/tangent.html
-#
-# Bugs:
-# - mirrored UVs are not handled correctly in either tangent export mode
-
 
 
 import os
@@ -59,6 +52,8 @@ import bmesh
 from mathutils import Vector, Matrix
 
 from bpy_extras.io_utils import axis_conversion
+
+from . import cust_tangents
 
 # I guess FBX uses degrees instead of radians (Arystan).
 # Call this function just before writing to FBX.
@@ -1390,30 +1385,6 @@ References:  {
 	
 	
 	
-	#		Calculate uv direction for tangent space:
-	# - tris required (kind of... half of each face is not considered in
-	# calculation if using quads but tangents still turn out ok if engine triangulation is close enough)
-	# - uvs must be properly mapped to vertices
-	def calc_uvtanbase(uvpoly, polyverts):
-		# get uv distances
-		uv_dBA = uvpoly[1] - uvpoly[0]
-		uv_dCA = uvpoly[2] - uvpoly[0]
-		# get point distances
-		p_dBA = polyverts[1] - polyverts[0]
-		p_dCA = polyverts[2] - polyverts[0]
-		# calculate face area - may not be needed since results are pretty much identical on import with or without this
-		area = (uv_dBA[0] * uv_dCA[1]) - (uv_dBA[1] * uv_dCA[0])
-		if area > 0.0:
-			area = 1.0 / area
-		tangentdir = Vector(
-			((uv_dCA[1] * p_dBA[0]) - (uv_dBA[1] * p_dCA[0]),
-			(uv_dCA[1] * p_dBA[1]) - (uv_dBA[1] * p_dCA[1]),
-			(uv_dCA[1] * p_dBA[2]) - (uv_dBA[1] * p_dCA[2]))
-			) * area
-		return tangentdir
-	
-	
-	
 	def write_mesh(my_mesh):
 		#Gather mesh data
 		me = my_mesh.blenData
@@ -1445,7 +1416,6 @@ References:  {
 		vindexlist2 = []
 		
 		is_collision = ("UCX_" in meshobject.name)
-		
 		
 		normalsmode = normals_export_mode
 		usedefaultnormals = False
@@ -1488,9 +1458,7 @@ References:  {
 		#################
 		# Normals:
 		if not usedefaultnormals:
-			
-			#################################################
-			# Custom - Included normals editor
+			# Included normals editor
 			if normalsmode == 'NORMEDIT':
 				# convert per vertex to per poly if needed
 				if bpy.context.window_manager.edit_splitnormals:
@@ -1514,8 +1482,8 @@ References:  {
 						operator.report({'WARNING'}, "List size mismatch")
 						usedefaultnormals = True
 				
-			################################################################
-			# Custom - adsn's Recalc Vertex Normals addon
+				
+			# adsn's Recalc Vertex Normals addon
 			elif normalsmode == 'RECALCVN':
 				if 'vertex_normal_list' in meshobject:
 					if len(meshobject.vertex_normal_list) == len(me_vertices):
@@ -1525,10 +1493,10 @@ References:  {
 					else:
 						operator.report({'WARNING'}, "List size mismatch")
 						usedefaultnormals = True
-			
 		
-		######################################################################
-		# Blender split vertex normals - Default / fallback
+		
+		# Blender split vertex normals 
+		# - Default / fallback / Mont29 + Blender 2.74 custom normals
 		if usedefaultnormals:
 			me.calc_normals_split()
 			me_normals = [t.normal.copy() for t in me.loops]
@@ -1539,12 +1507,10 @@ References:  {
 		##############################################################
 		# Tangents + Binormals:
 		if export_tangents:
-			
-			############################
 			# Blender Default - MikkTSpace (read from loops)
 			# - copy() because me_tangents is cleared by calc_normals_split
 			if export_tangentspace_base == 'DEFAULT':
-				if normalsmode == 'BLEND':
+				if usedefaultnormals:
 					me.calc_normals_split()
 					me.calc_tangents(me.uv_layers[tangentspace_uvlnum].name)
 					
@@ -1554,136 +1520,26 @@ References:  {
 					me.free_tangents()
 					me.free_normals_split()
 				else:
-					operator.report({'WARNING'}, "Default Tangents require default normals")
+					operator.report({'WARNING'}, "Default Tangents only work with Blender normals")
 					export_tangents = False
 				
-			############################
+				
 			# Custom - modified Lengyel's method
 			elif export_tangentspace_base == 'LENGYEL':
 				t_uvlayer = [uvl for uvl in me.tessface_uv_textures[tangentspace_uvlnum].data]
-				weightslist = []
 				
-				for i in range(len(me_faces)):
-					faceverts = []
-					uvface = []
-					
-					uvface.append(t_uvlayer[i].uv1.copy())
-					uv_vertcoords.append(t_uvlayer[i].uv1.copy())
-					uvface.append(t_uvlayer[i].uv2.copy())
-					uv_vertcoords.append(t_uvlayer[i].uv2.copy())
-					uvface.append(t_uvlayer[i].uv3.copy())
-					uv_vertcoords.append(t_uvlayer[i].uv3.copy())
-					if len(me_faces[i].vertices) > 3:
-						uvface.append(t_uvlayer[i].uv4.copy())
-						uv_vertcoords.append(t_uvlayer[i].uv4.copy())
-					
-					for j in me_faces[i].vertices:
-						faceverts.append(me_vertices[j].co.copy())
-						vindexlist2.append(len(vindices))
-						vindices.append(j)
-					
-					for k in range(len(me_faces[i].vertices)):
-						uvverts_list.append(calc_uvtanbase(uvface, faceverts))
-				
-				if len(uvverts_list) != len(me_normals):
-					operator.report({'WARNING'}, "UV list length mismatch: Tangents will not be calculated.")
-				else :
-					# Calculate tangents/binormals from normals list and uvverts_list
-					for i in range(len(me_normals)):
-						tan = (uvverts_list[i] - (me_normals[i] * me_normals[i].dot(uvverts_list[i]))).normalized()
-						me_tangents.append(tan)
-						me_binormals.append(me_normals[i].cross(tan))
-					
-					
-					tempvect = Vector((0.0,0.0,0.0))
-					smoothlist = [[],[],[],[]]
-					vertstoremove = []
-					new_tangents = [v for v in me_tangents]
-					
-					# 			Tangent Smoothing
-					# - averages the tangents for each vert connected to a smoothed face to remove 'jittering'
-					# - smoothing is based on uv islands each vert's faces are in
-					for i in range(len(me_vertices)):
-						
-						# Gather Loop
-						# - slow - checks the index list for uv islands each vert is part of
-						for j in vindexlist2:
-							if vindices[j] == i:
-								vertstoremove.append(j)
-								if len(smoothlist[0]) > 0:
-									if math.sqrt(((uv_vertcoords[j][0] - uv_vertcoords[smoothlist[0][0]][0]) ** 2) + ((uv_vertcoords[j][1] - uv_vertcoords[smoothlist[0][0]][1]) ** 2)) < 0.01:
-										smoothlist[0].append(j)
-									else:
-										if len(smoothlist[1]) > 0:
-											if math.sqrt(((uv_vertcoords[j][0] - uv_vertcoords[smoothlist[1][0]][0]) ** 2) + ((uv_vertcoords[j][1] - uv_vertcoords[smoothlist[1][0]][1]) ** 2)) < 0.01:
-												smoothlist[1].append(j)
-											else:
-												if len(smoothlist[2]) > 0:
-													if math.sqrt(((uv_vertcoords[j][0] - uv_vertcoords[smoothlist[2][0]][0]) ** 2) + ((uv_vertcoords[j][1] - uv_vertcoords[smoothlist[2][0]][1]) ** 2)) < 0.01:
-														smoothlist[2].append(j)
-													else:
-														smoothlist[3].append(j)
-												else:
-													smoothlist[2].append(j)
-										else:
-											smoothlist[1].append(j)
-								else:
-									smoothlist[0].append(j)
-						
-						# calculation time tweak: remove indices that won't come up again for less iterations in successive passes
-						for k in vertstoremove:
-							vindexlist2.remove(k)
-						
-						# Smoothing pass for this vert
-						# - averages the tangents of vertices that are on the same uv island
-						# - 4 uv islands / vertex max, anything else gets averaged into fourth island for now
-						if len(smoothlist[0]) > 0:
-							tempvect.zero()
-							for l in smoothlist[0]:
-								tempvect += me_tangents[l]
-							tempvect = tempvect / float(len(smoothlist[0]))
-							for t in smoothlist[0]:
-								new_tangents[t] = tempvect.copy()
-								me_binormals[t] = me_normals[t].cross(tempvect)
-							
-							if len(smoothlist[1]) > 0:
-								tempvect.zero()
-								for l in smoothlist[1]:
-									tempvect += me_tangents[l]
-								tempvect = tempvect / float(len(smoothlist[1]))
-								for t in smoothlist[1]:
-									new_tangents[t] = tempvect.copy()
-									me_binormals[t] = me_normals[t].cross(tempvect)
-									
-								if len(smoothlist[2]) > 0:
-									tempvect.zero()
-									for l in smoothlist[2]:
-										tempvect += me_tangents[l]
-									tempvect = tempvect / float(len(smoothlist[2]))
-									for t in smoothlist[2]:
-										new_tangents[t] = tempvect.copy()
-										me_binormals[t] = me_normals[t].cross(tempvect)
-										
-									if len(smoothlist[3]) > 0:
-										tempvect.zero()
-										for l in smoothlist[3]:
-											tempvect += me_tangents[l]
-										tempvect = tempvect / float(len(smoothlist[3]))
-										for t in smoothlist[3]:
-											new_tangents[t] = tempvect.copy()
-											me_binormals[t] = me_normals[t].cross(tempvect)
-						
-						# reset vars for next iteration
-						smoothlist = [[],[],[],[]]
-						vertstoremove = []
-					
-					me_tangents = [v for v in new_tangents]
+				me_tangents, me_binormals = cust_tangents.build_initialtanlists(
+					me_faces, me_vertices, t_uvlayer, me_normals
+				)
+			
 		
 		######################################
 		
 		
 		# use global matrix here to apply scale + axis settings to the mesh
-		poseMatrix = write_object_props(my_mesh.blenObject, None, meshobject.matrix_world * global_matrix)[3]
+		poseMatrix = write_object_props(
+			my_mesh.blenObject, None, meshobject.matrix_world * global_matrix
+		)[3]
 		
 		# Calculate the global transform for the mesh in the bind pose the same way we do
 		# in write_sub_deformer_skin
@@ -1906,14 +1762,10 @@ References:  {
 			if merge_vertexcollayers:
 				newvcols = []
 				finalvcols = []
-				totalcolcount = 0
 				for collayer in collayers:
 					newvcols = []
-					totalcolcount = 0
 					findex = 0
-					for cf in collayer.data:
-						totalcolcount += len(me_faces[findex].vertices)
-						
+					for cf in collayer.data:						
 						newvcols.append(cf.color1)
 						newvcols.append(cf.color2)
 						newvcols.append(cf.color3)
@@ -1931,10 +1783,10 @@ References:  {
 						
 						tempcount += 1
 							
-				fw('\n\t\tLayerElementColor: 0 {')
-				fw('\n\t\t\tVersion: 101')
-				fw('\n\t\t\tName: "colscombined"')
 				fw('''
+		LayerElementColor: 0 {
+			Version: 101
+			Name: "colscombined"
 			MappingInformationType: "ByPolygonVertex"
 			ReferenceInformationType: "IndexToDirect"
 			Colors: ''')
@@ -1974,13 +1826,13 @@ References:  {
 			
 			
 				for colindex, collayer in enumerate(collayers):
-					fw('\n\t\tLayerElementColor: %i {' % colindex)
-					fw('\n\t\t\tVersion: 101')
-					fw('\n\t\t\tName: "%s"' % collayer.name)
 					fw('''
-				MappingInformationType: "ByPolygonVertex"
-				ReferenceInformationType: "IndexToDirect"
-				Colors: ''')
+		LayerElementColor: %i {
+			Version: 101
+			Name: "%s"
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "IndexToDirect"
+			Colors: ''' % (colindex, collayer.name))
 					
 					i = -1
 					ii = 0  # Count how many Colors we write
@@ -2255,11 +2107,7 @@ References:  {
 
 		if len(collayers) > 1:
 			# Take into account any UV layers
-			layer_offset = 0
-			if uvlayers:
-				layer_offset = len(uvlayers) - 1
-
-			for i in range(layer_offset, len(collayers) + layer_offset):
+			for i in range(1, len(collayers)):
 				fw('\n\t\tLayer: %i {' % i)
 				fw('\n\t\t\tVersion: 100')
 
