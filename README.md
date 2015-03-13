@@ -153,21 +153,31 @@ _Importer for Normals (FBX 6.1 files only):_
 *Documentation:* 
 
 
-- soon
+- probably next week  
 
 
 
 
 ========================================================================================================= 
 Changelog: 
-
-*1.0.1* (current) 
-
+  
+*1.0.2* (current) 
+  
+- fix to custom normals generation in poly mode when 'selected only' was unchecked
+- added detection of Mont29's build to generation functions (automatically sets normals now)
+- moved custom tangents functions since they aren't really needed anymore in newer Blender builds
+- default tangents can now be exported if default normals are automatically detected by the exporter
+- minor fix to the way vertex color layers are written  
+  
+  
+*1.0.1* 
+  
 - removed 7.3 exporter due to many issues
 - added preliminary support for Mont29's Blender 2.72 build 
  
-*1.0.0* 
  
+*1.0.0* 
+  
 - finished 7.3 exporter for everything except Animations, Lamps, Cameras
 - added remaining windowmanager variables to cleanup
 - minor formatting changes to scripts 
