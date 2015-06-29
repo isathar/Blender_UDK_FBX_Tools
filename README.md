@@ -2,9 +2,23 @@ Blender -> UE 3/4 FBX Tools
 
 Blender addon that adds an editor for custom vertex normals, and an exporter with some tweaks and optimizations specific to the Unreal engine.
  
+========================================================================================================= 
+ 
+*Old Version*  
+_This addon will not be updated anymore, and has been superceded by a separate normals editor and exporter for Blender 2.74 available here:_ 
+ 
+*Normals Editor:* 
+https://github.com/isathar/Blender-Normal-Editing-Tools/  
+
+*Optional Exporter:*  _Not needed to export normals in 2.74_
+https://github.com/isathar/Blender_UDK_FBX-Exporter/  
+ 
+========================================================================================================= 
  
  
-*Compatible with Blender v2.70+* 
+*Compatible with Blender v2.70 - 2.73* 
+
+
  
  
 ========================================================================================================= 
